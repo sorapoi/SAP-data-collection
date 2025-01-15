@@ -36,7 +36,7 @@
 
 ```bash
 # 安装依赖
-pip install fastapi uvicorn python-multipart pyjwt
+pip install -r requirements.txt
 
 # 启动服务器
 uvicorn main:app --reload
@@ -88,3 +88,19 @@ npm run dev
 2. 前端默认端口：5173
 3. 首次运行自动初始化数据库
 4. 物料编号不可重复
+
+## CI/CD
+
+本项目使用 GitHub Actions 进行持续集成和部署：
+
+### 自动化测试
+- 后端：Python 单元测试
+- 前端：TypeScript 类型检查
+- 代码质量：Flake8 代码风格检查
+
+### 自动部署
+- 提交到 main 分支自动触发部署
+- 部署需要配置以下 secrets:
+  - DEPLOY_KEY: 服务器 SSH 密钥
+  - SERVER_IP: 服务器 IP
+  - SERVER_USER: 服务器用户名

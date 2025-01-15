@@ -6,21 +6,25 @@ from typing import List, Optional
 import sqlite3
 import jwt
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from dotenv import load_dotenv
+import os
 
 app = FastAPI()
+
+load_dotenv()
+
+# JWT配置
+SECRET_KEY = os.getenv("SECRET_KEY")
+security = HTTPBearer()
 
 # 允许跨域
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=eval(os.getenv("CORS_ORIGINS", "[]")),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# JWT配置
-SECRET_KEY = "your-secret-key"
-security = HTTPBearer()
 
 # 数据模型
 class User(BaseModel):
