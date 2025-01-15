@@ -112,6 +112,27 @@ npm run dev
 ### 自动部署
 - 提交到 main 分支自动触发部署
 - 部署需要配置以下 secrets:
-  - DEPLOY_KEY: 服务器 SSH 密钥
-  - SERVER_IP: 服务器 IP
-  - SERVER_USER: 服务器用户名
+  - SSH_PRIVATE_KEY: 服务器 SSH 私钥（不是公钥）
+  - SERVER_IP: 服务器 IP 地址
+  - SERVER_USER: 服务器用户名（需要有相应目录的权限）
+
+### 部署配置说明
+1. 生成 SSH 密钥对：
+   ```bash
+   ssh-keygen -t rsa -b 4096 -C "your_email@example.com"
+   ```
+
+2. 在 GitHub 仓库的 Settings -> Secrets -> Actions 中添加以下 secrets：
+   - SSH_PRIVATE_KEY：私钥内容（~/.ssh/id_rsa）
+   - SERVER_IP：服务器 IP 地址
+   - SERVER_USER：有权限的服务器用户名
+
+3. 在服务器上：
+   - 将公钥（~/.ssh/id_rsa.pub）添加到 ~/.ssh/authorized_keys
+   - 确保部署目录 /app/materials 存在且有正确权限
+   - 确保服务器防火墙允许 SSH 连接（端口 22）
+
+4. 常见问题排查：
+   - SSH 认证失败：检查私钥格式和权限
+   - 目录访问失败：检查用户权限
+   - Git 拉取失败：检查仓库访问权限
