@@ -1,10 +1,10 @@
 # 构建阶段
 FROM node:18-alpine as build-stage
 
-WORKDIR /app/materials
+WORKDIR /app
 
 # 复制并安装依赖
-COPY package*.json ./
+COPY .. .
 RUN npm ci
 
 # 构建应用

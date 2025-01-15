@@ -15,9 +15,6 @@ fi
 # 拉取最新代码（如果不是首次部署）
 git pull
 
-# 复制源代码到 /app/materials
-cp -r . /app/materials
-
 # 构建和启动服务
 docker-compose pull
 docker-compose up -d --build 

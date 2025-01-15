@@ -21,8 +21,6 @@ services:
     build: frontend
     container_name: materials-frontend
     restart: always
-    volumes:
-      - /app/materials:/app/materials
     ports:
       - "80:80"
     depends_on:
