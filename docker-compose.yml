@@ -3,8 +3,7 @@ version: '3.8'
 services:
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: backend
     container_name: materials-backend
     restart: always
     environment:
@@ -23,8 +22,7 @@ services:
 
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      context: frontend
     container_name: materials-frontend
     restart: always
     ports:
