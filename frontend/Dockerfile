@@ -3,11 +3,11 @@ FROM node:18-alpine as build-stage
 
 WORKDIR /app
 
-# 复制所有源代码
-COPY .. .
+COPY ../package*.json .
+RUN npm ci
 
-# 安装依赖并构建
-RUN npm ci && npm run build
+COPY .. .
+RUN npm run build
 
 # 生产阶段
 FROM nginx:stable-alpine as production-stage
