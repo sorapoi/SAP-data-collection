@@ -7,13 +7,14 @@ COPY package*.json .
 RUN npm ci
 
 COPY . .
-RUN npm run build
+RUN npm run build && ls -la dist/
 
 # 生产阶段
 FROM nginx:stable-alpine as production-stage
 
 # 复制构建产物
-COPY --from=build-stage /app/dist /usr/share/nginx/html
+COPY --from=build-stage /app/dist/ /usr/share/nginx/html/
+RUN ls -la /usr/share/nginx/html/
 
 # 复制 nginx 配置
 COPY ./frontend/nginx.conf /etc/nginx/conf.d/default.conf
