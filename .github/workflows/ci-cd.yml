@@ -17,6 +17,6 @@ jobs:
         port: 10022
         command_timeout: 30m
         script: |
-          cd /app/materials
+          cd /root/SAP-data-collection
           git pull
           docker-compose up -d --build 
