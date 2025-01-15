@@ -2,7 +2,9 @@ version: '3.8'
 
 services:
   backend:
-    build: backend
+    build: 
+      context: backend
+      dockerfile: Dockerfile
     container_name: materials-backend
     restart: always
     environment:
