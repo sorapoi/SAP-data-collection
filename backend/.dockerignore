@@ -1,0 +1,18 @@
+# 版本控制
+.git
+.gitignore
+
+# 开发环境
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+venv
+
+# 数据文件
+*.db
+data/
+
+# 其他
+.env
+.env.* 
