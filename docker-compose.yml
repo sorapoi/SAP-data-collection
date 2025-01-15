@@ -2,41 +2,33 @@ version: '3.8'
 
 services:
   backend:
-    build:
-      context: backend
+    build: backend
     container_name: materials-backend
     restart: always
     environment:
       - SECRET_KEY=${SECRET_KEY}
       - CORS_ORIGINS=${CORS_ORIGINS}
-      - DATABASE_PATH=/app/data/materials.db
+      - DATABASE_PATH=/app/materials/data/materials.db
     volumes:
-      - ./data:/app/data
+      - /app/materials:/app/materials
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-    networks:
-      - app-network
 
   frontend:
-    build:
-      context: frontend
+    build: frontend
     container_name: materials-frontend
     restart: always
+    volumes:
+      - /app/materials:/app/materials
     ports:
       - "80:80"
     depends_on:
       backend:
         condition: service_healthy
-    networks:
-      - app-network
 
 networks:
-  app-network:
-    driver: bridge
-
-volumes:
-  data:
-    driver: local 
+  default:
+    driver: bridge 

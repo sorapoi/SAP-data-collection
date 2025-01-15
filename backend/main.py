@@ -344,3 +344,8 @@ async def get_export_materials(user = Depends(authenticate_user)):
     except Exception as e:
         print(f"Error exporting materials: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e)) 
+
+# 添加健康检查端点
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"} 
