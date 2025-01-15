@@ -1,8 +1,9 @@
 <template>
-  <div class="app-container">
+  <div class="app-container" :style="bingWallpaperUrl ? { backgroundImage: `url(${bingWallpaperUrl})` } : {}">
     <!-- 登录部分 -->
     <div v-if="!isLoggedIn" class="login-container">
       <div class="login-form">
+        <h1>SAP数据收集系统</h1>
         <h2>用户登录</h2>
         <input v-model="loginForm.username" placeholder="用户名" type="text">
         <input v-model="loginForm.password" placeholder="密码" type="password">
@@ -89,7 +90,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import * as XLSX from 'xlsx'
 import axios from 'axios'
 
@@ -454,11 +455,36 @@ const handlePageChange = async (page: number) => {
   currentPage.value = page
   await loadMaterials()
 }
+
+// 在现有的 import 语句下添加
+const bingWallpaperUrl = ref('')
+
+// 在现有的代码中添加获取壁纸的函数
+const getBingWallpaper = async () => {
+  try {
+    const response = await axios.get('https://bing.biturl.top/')
+    bingWallpaperUrl.value = response.data.url
+  } catch (error) {
+    console.error('获取壁纸失败:', error)
+    // 设置默认背景色作为后备方案
+    bingWallpaperUrl.value = ''
+  }
+}
+
+// 在组件加载时获取壁纸
+onMounted(() => {
+  getBingWallpaper()
+})
 </script>
 
 <style scoped>
 .app-container {
   padding: 20px;
+  min-height: 100vh;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
 }
 
 .login-container {
@@ -466,13 +492,16 @@ const handlePageChange = async (page: number) => {
   justify-content: center;
   align-items: center;
   min-height: 100vh;
+  background-color: rgba(0, 0, 0, 0.4); /* 添加半透明遮罩 */
 }
 
 .login-form {
-  background: white;
-  padding: 20px;
+  background: rgba(255, 255, 255, 0.95); /* 增加表单背景透明度 */
+  padding: 30px;
   border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(10px); /* 添加毛玻璃效果 */
+  width: 320px;
 }
 
 .login-form input {
@@ -617,5 +646,19 @@ select:focus {
 
 .pagination button:hover:not(:disabled) {
   background-color: #45a049;
+}
+
+.login-form h1 {
+  text-align: center;
+  color: #333;
+  margin-bottom: 20px;
+  font-size: 24px;
+}
+
+.login-form h2 {
+  text-align: center;
+  color: #666;
+  margin-bottom: 20px;
+  font-size: 18px;
 }
 </style>
