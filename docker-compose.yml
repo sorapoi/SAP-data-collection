@@ -9,6 +9,8 @@ services:
       - SECRET_KEY=${SECRET_KEY}
       - CORS_ORIGINS=${CORS_ORIGINS}
       - DATABASE_PATH=/app/materials/data/materials.db
+    ports:
+      - "8000:8000"
     volumes:
       - /app/materials:/app/materials
     healthcheck:
