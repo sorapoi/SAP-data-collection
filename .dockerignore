@@ -1,0 +1,32 @@
+# 版本控制
+.git
+.gitignore
+
+# 开发环境
+node_modules
+venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+
+# 数据文件
+*.db
+data/
+
+# 日志
+*.log
+
+# 编辑器配置
+.vscode
+.idea
+
+# 测试文件
+tests/
+coverage/
+.coverage
+
+# 其他
+.DS_Store
+.env
+.env.* 

@@ -3,17 +3,29 @@ FROM node:18-alpine as build-stage
 
 WORKDIR /app
 
+# 复制并安装依赖
 COPY package*.json ./
-RUN npm install
+RUN npm ci
 
+# 复制源代码
 COPY . .
+
+# 构建应用
 RUN npm run build
 
 # 生产阶段
 FROM nginx:stable-alpine as production-stage
 
+# 复制构建产物
 COPY --from=build-stage /app/dist /usr/share/nginx/html
+
+# 复制 nginx 配置
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
+# 设置权限
+RUN chown -R nginx:nginx /usr/share/nginx/html && \
+    chmod -R 755 /usr/share/nginx/html
+
 EXPOSE 80
+
 CMD ["nginx", "-g", "daemon off;"] 
