@@ -18,7 +18,9 @@ services:
       retries: 3
 
   frontend:
-    build: frontend
+    build: 
+      context: .
+      dockerfile: frontend/Dockerfile
     container_name: materials-frontend
     restart: always
     ports:
