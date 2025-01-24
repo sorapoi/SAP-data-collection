@@ -20,7 +20,7 @@ security = HTTPBearer()
 # 允许跨域
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=eval(os.getenv("CORS_ORIGINS", "[]")),
+    allow_origins=["http://localhost", "http://localhost:80", "http://frontend"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
