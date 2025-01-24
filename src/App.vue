@@ -175,8 +175,8 @@ const loginForm = ref({
   password: ''
 })
 
-// API基础URL
-const API_BASE_URL = 'http://localhost:8000'
+// 修改 API_BASE_URL 的定义
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
 // 权限控制
 const canImport = computed(() => department.value === '信息部')

@@ -3,17 +3,19 @@ FROM node:18-alpine as build-stage
 
 WORKDIR /app
 
-COPY package*.json .
-RUN npm ci
+COPY package*.json ./
+RUN npm install
 
 COPY . .
-RUN npm run build && ls -la dist/
+
+# 使用生产环境变量构建
+RUN npm run build
 
 # 生产阶段
 FROM nginx:stable-alpine as production-stage
 
 # 复制构建产物
-COPY --from=build-stage /app/dist/ /usr/share/nginx/html/
+COPY --from=build-stage /app/dist /usr/share/nginx/html
 RUN ls -la /usr/share/nginx/html/
 
 # 复制 nginx 配置

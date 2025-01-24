@@ -3,36 +3,38 @@ version: '3.8'
 services:
   backend:
     build: 
-      context: backend
+      context: ./backend
       dockerfile: Dockerfile
     container_name: materials-backend
     restart: always
     environment:
-      - SECRET_KEY=${SECRET_KEY}
-      - CORS_ORIGINS=${CORS_ORIGINS}
-      - DATABASE_PATH=/app/materials/data/materials.db
+      - SECRET_KEY=your_secret_key_here
+      - CORS_ORIGINS=["http://localhost", "http://frontend"]
     ports:
       - "8000:8000"
     volumes:
-      - /app/materials/data:/app/materials/data
+      - ./backend/materials.db:/app/materials.db
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
+    networks:
+      - app-network
 
   frontend:
     build: 
-      context: .
-      dockerfile: frontend/Dockerfile
+      context: ./frontend
+      dockerfile: Dockerfile
     container_name: materials-frontend
     restart: always
     ports:
       - "80:80"
     depends_on:
-      backend:
-        condition: service_healthy
+      - backend
+    networks:
+      - app-network
 
 networks:
-  default:
+  app-network:
     driver: bridge 
