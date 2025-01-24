@@ -19,7 +19,7 @@ COPY --from=build-stage /app/dist /usr/share/nginx/html
 RUN ls -la /usr/share/nginx/html/
 
 # 复制 nginx 配置
-COPY ./frontend/nginx.conf /etc/nginx/conf.d/default.conf
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 # 设置权限
 RUN chown -R nginx:nginx /usr/share/nginx/html && \
