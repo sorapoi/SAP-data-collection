@@ -139,10 +139,13 @@ const totalPages = ref(0)
 const totalItems = ref(0)
 const tableData = ref<MaterialRow[]>([])
 const headers = [
-  '物料', '物料描述', '市场', '备注1', '备注2', '生产厂商', '检测周期', '最小批量大小', '舍入值', '计划交货时间', 'MRP控制者', 'MRP类型', 
-  '批量程序', '固定批量', '再订货点', '安全库存', '批量大小', '采购类型', '收货处理时间', 'MRP区域', '反冲', '批量输入', '自制生产时间', '策略组', '综合MRP',
-  '消耗模式', '向后跨期期间', '向后跨期时间', '独立/集中',
-  '计划时间界', '生产评估', '生产计划', '新建时间', '完成时间'
+  '物料', '物料描述', '市场', '备注1', '备注2', '生产厂商', 
+  '检测时间QC', '最小批量大小PUR', '舍入值PUR', '计划交货时间PUR', 
+  'MRP控制者', 'MRP类型', '批量程序', '固定批量', '再订货点', 
+  '安全库存', '批量大小', '舍入值', '采购类型', '收货处理时间', 
+  '计划交货时间', 'MRP区域', '反冲', '批量输入', '自制生产时间', 
+  '策略组', '综合MRP', '消耗模式', '向后跨期期间', '向后跨期时间', 
+  '独立集中', '计划时间界', '生产评估', '生产计划', '新建时间', '完成时间'
 ]
 
 // MRP控制者选项
@@ -184,9 +187,9 @@ const getEditableColumns = computed(() => {
     case '运营管理部':
       return ['MRP控制者']
     case '采购部':
-      return ['最小批量大小', '舍入值', '计划交货时间']
+      return ['最小批量大小PUR', '舍入值PUR', '计划交货时间PUR']
     case 'QC检测室':
-      return ['检测周期']
+      return ['检测时间QC']
     default:
       return []
   }
@@ -301,10 +304,10 @@ const handleFileUpload = async (event: Event) => {
         备注1: row.备注1?.trim() || null,
         备注2: row.备注2?.trim() || null,
         生产厂商: row.生产厂商?.trim() || null,
-        检测周期: row.检测周期?.trim() || null,
-        最小批量大小: row.最小批量大小?.trim() || null,
-        舍入值: row.舍入值?.trim() || null,
-        计划交货时间: row.计划交货时间?.trim() || null,
+        检测时间QC: row.检测周期?.trim() || null,
+        最小批量大小PUR: row.最小批量大小?.trim() || null,
+        舍入值PUR: row.舍入值?.trim() || null,
+        计划交货时间PUR: row.计划交货时间?.trim() || null,
         MRP控制者: row.MRP控制者?.trim() || null,
         MRP类型: row.MRP类型?.trim() || null,
         批量程序: row.批量程序?.trim() || null,
@@ -312,8 +315,10 @@ const handleFileUpload = async (event: Event) => {
         再订货点: row.再订货点?.trim() || null,
         安全库存: row.安全库存?.trim() || null,
         批量大小: row.批量大小?.trim() || null,
+        舍入值: row.舍入值?.trim() || null,
         采购类型: row.采购类型?.trim() || null,
         收货处理时间: row.收货处理时间?.trim() || null,
+        计划交货时间: row.计划交货时间?.trim() || null,
         MRP区域: row.MRP区域?.trim() || null,
         反冲: row.反冲?.trim() || null,
         批量输入: row.批量输入?.trim() || null,
@@ -437,6 +442,9 @@ const handleCellChange = async (rowIndex: number, header: string, event: Event) 
     // 更新本地数据
     tableData.value[rowIndex][header] = value
     
+    // 检查是否需要触发计算
+    checkAndCalculate(tableData.value[rowIndex])
+    
   } catch (error: any) {
     // 恢复原值
     if (header === 'MRP控制者') {
@@ -445,7 +453,6 @@ const handleCellChange = async (rowIndex: number, header: string, event: Event) 
       (event.target as HTMLInputElement).value = material[header]
     }
     
-    // 显示错误信息
     alert(error.response?.data?.detail || '保存失败')
   }
 }
@@ -471,20 +478,251 @@ const getBingWallpaper = async () => {
   }
 }
 
-// 在组件加载时获取壁纸
+// 在 script setup 部分添加以下代码
+const checkLoginStatus = async () => {
+  const token = localStorage.getItem('token')
+  if (token) {
+    try {
+      // 验证 token 有效性
+      const response = await axios.get(`${API_BASE_URL}/materials`, {
+        headers: { Authorization: `Bearer ${token}` },
+        params: {
+          page: 1,
+          page_size: pageSize.value
+        }
+      })
+      
+      // 从 token 中解析用户信息
+      const tokenData = JSON.parse(atob(token.split('.')[1]))
+      username.value = tokenData.username
+      department.value = tokenData.department
+      isLoggedIn.value = true
+      
+      // 加载数据
+      await loadMaterials()
+    } catch (error) {
+      // token 无效，清除本地存储
+      localStorage.removeItem('token')
+      isLoggedIn.value = false
+      username.value = ''
+      department.value = ''
+    }
+  }
+}
+
+// 修改 onMounted
 onMounted(() => {
   getBingWallpaper()
+  checkLoginStatus() // 添加登录状态检查
 })
+
+// 检查是否需要触发计算
+const checkAndCalculate = (row: MaterialRow) => {
+  // 检查7,8,9,10,11列是否都有值
+  const requiredFields = [
+    row.检测时间QC,
+    row.最小批量大小PUR,
+    row.舍入值PUR,
+    row.计划交货时间PUR,
+    row.MRP控制者
+  ]
+  
+  if (requiredFields.every(field => field?.trim())) {
+    calculateFields(row)
+  }
+}
+
+// 计算字段值
+const calculateFields = (row: MaterialRow) => {
+  const firstChar = row.物料?.[0]
+  
+  // MRP类型计算
+  if (firstChar === '4' && row.市场 === '中国') {
+    row.MRP类型 = 'ND'
+  } else if (firstChar === '5' && row.市场 === '中国') {
+    row.MRP类型 = 'ND'
+  } else if (firstChar === '5' && row.市场 !== '中国') {
+    row.MRP类型 = 'M2'
+  } else if (row.物料) {
+    row.MRP类型 = 'PD'
+  }
+
+  // 批量程序计算
+  if (firstChar === '1') {
+    row.批量程序 = 'MB'
+  } else if (['2', '3'].includes(firstChar)) {
+    row.批量程序 = 'WB'
+  } else if (firstChar === '4' && row.市场 !== '中国' && row.MRP控制者 !== 'Y01') {
+    row.批量程序 = 'FX'
+  } else if (row.物料) {
+    row.批量程序 = 'EX'
+  }
+
+  // 固定批量计算
+  row.固定批量 = (row.批量程序 !== 'FX' && row.批量程序 !== '') ? 'NA' : ''
+
+  // 再订货点计算
+  row.再订货点 = row.物料 ? 'NA' : ''
+
+  // 安全库存计算
+  row.安全库存 = ['4', '5'].includes(firstChar) ? 'NA' : ''
+
+  // 采购类型计算
+  if (row.物料) {
+    row.采购类型 = ['1', '2', '3'].includes(firstChar) ? 'F' : 'E'
+  }
+
+  // 收货处理时间计算
+  const 检测时间 = parseInt(row.检测时间QC || '0')
+  if (firstChar === '5') {
+    row.收货处理时间 = (检测时间 + 2).toString()
+  } else if (firstChar === '4') {
+    row.收货处理时间 = '0'
+  } else if (firstChar === '1' && row.MRP控制者 !== 'Y01') {
+    row.收货处理时间 = (检测时间 + 24).toString()
+  } else if (row.物料) {
+    row.收货处理时间 = (检测时间 + 4).toString()
+  }
+
+  // 计划交货时间计算
+  row.计划交货时间 = ['4', '5'].includes(firstChar) ? 'NA' : row.计划交货时间PUR
+
+  // MRP区域计算
+  row.MRP区域 = row.物料 ? '5000-1' : ''
+
+  // 反冲计算
+  if (firstChar === '1') {
+    row.反冲 = '2'
+  } else if (['2', '4'].includes(firstChar)) {
+    row.反冲 = '1'
+  } else if (row.物料) {
+    row.反冲 = 'NA'
+  }
+
+  // 批量输入计算
+  row.批量输入 = firstChar === '4' ? '1' : 'NA'
+
+  // 自制生产时间计算
+  if (firstChar === '4') {
+    row.自制生产时间 = '25'
+  } else if (firstChar === '5') {
+    row.自制生产时间 = '10'
+  } else {
+    row.自制生产时间 = 'NA'
+  }
+
+  // 策略组计算
+  if (firstChar === '4') {
+    row.策略组 = '10'
+  } else if (firstChar === '5' && row.市场 === '中国') {
+    row.策略组 = '11'
+  } else if (firstChar === '5') {
+    row.策略组 = '50'
+  } else {
+    row.策略组 = 'NA'
+  }
+
+  // 综合MRP计算
+  row.综合MRP = (firstChar === '5' && row.市场 === '中国') ? '2' : 'NA'
+
+  // 消耗模式计算
+  if (firstChar === '5' && row.市场 === '中国') {
+    row.消耗模式 = '2'
+  } else if (firstChar === '5') {
+    row.消耗模式 = '1'
+  } else {
+    row.消耗模式 = 'NA'
+  }
+
+  // 向前/向后消耗期间计算
+  if (firstChar === '5' && row.市场 === '中国') {
+    row.向后跨期期间 = '30'
+    row.向后跨期时间 = '30'
+  } else if (firstChar === '5') {
+    row.向后跨期期间 = '999'
+    row.向后跨期时间 = '999'
+  } else {
+    row.向后跨期期间 = 'NA'
+    row.向后跨期时间 = 'NA'
+  }
+
+  // 独立/集中计算
+  row.独立集中 = firstChar === '5' ? 'NA' : '2'
+
+  // 计划时间界计算
+  if (firstChar === '5' && row.市场 === '中国') {
+    row.计划时间界 = '1'
+  } else if (firstChar === '5') {
+    row.计划时间界 = '60'
+  } else {
+    row.计划时间界 = 'NA'
+  }
+
+  // 生产调度员计算
+  row.生产评估 = ['4', '5'].includes(firstChar) ? row.MRP控制者 : 'NA'
+
+  // 生产计划参数文件计算
+  row.生产计划 = ['4', '5'].includes(firstChar) ? 'ZJ01' : 'NA'
+
+  // 批量大小和舍入值计算
+  row.批量大小 = row.最小批量大小PUR
+  row.舍入值 = row.舍入值PUR
+
+  // 更新数据库
+  updateCalculatedFields(row)
+}
+
+// 更新数据库中的计算字段
+const updateCalculatedFields = async (row: MaterialRow) => {
+  try {
+    const calculatedFields = {
+      MRP类型: row.MRP类型,
+      批量程序: row.批量程序,
+      固定批量: row.固定批量,
+      再订货点: row.再订货点,
+      安全库存: row.安全库存,
+      采购类型: row.采购类型,
+      收货处理时间: row.收货处理时间,
+      计划交货时间: row.计划交货时间,
+      MRP区域: row.MRP区域,
+      反冲: row.反冲,
+      批量输入: row.批量输入,
+      自制生产时间: row.自制生产时间,
+      策略组: row.策略组,
+      综合MRP: row.综合MRP,
+      消耗模式: row.消耗模式,
+      向后跨期期间: row.向后跨期期间,
+      向后跨期时间: row.向后跨期时间,
+      独立集中: row.独立集中,
+      计划时间界: row.计划时间界,
+      生产评估: row.生产评估,
+      生产计划: row.生产计划,
+      批量大小: row.批量大小,
+      舍入值: row.舍入值
+    }
+
+    await axios.put(
+      `${API_BASE_URL}/materials/${encodeURIComponent(row.物料)}/calculated-fields`,
+      calculatedFields,
+      {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      }
+    )
+  } catch (error) {
+    console.error('更新计算字段失败:', error)
+    alert('更新计算字段失败')
+  }
+}
 </script>
 
 <style scoped>
 .app-container {
-  padding: 20px;
   min-height: 100vh;
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
   background-attachment: fixed;
+  padding: 20px;
 }
 
 .login-container {
@@ -660,5 +898,15 @@ select:focus {
   color: #666;
   margin-bottom: 20px;
   font-size: 18px;
+}
+
+.main-content {
+  background-color: rgba(255, 255, 255, 0.95);
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(10px);
+  margin: 20px auto;
+  max-width: 95%;
 }
 </style>

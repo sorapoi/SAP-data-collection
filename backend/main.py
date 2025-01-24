@@ -38,10 +38,10 @@ class Material(BaseModel):
     备注1: Optional[str] = None
     备注2: Optional[str] = None
     生产厂商: Optional[str] = None
-    检测周期: Optional[str] = None
-    最小批量大小: Optional[str] = None
-    舍入值: Optional[str] = None
-    计划交货时间: Optional[str] = None
+    检测时间QC: Optional[str] = None
+    最小批量大小PUR: Optional[str] = None
+    舍入值PUR: Optional[str] = None
+    计划交货时间PUR: Optional[str] = None
     MRP控制者: Optional[str] = None
     MRP类型: Optional[str] = None
     批量程序: Optional[str] = None
@@ -49,8 +49,10 @@ class Material(BaseModel):
     再订货点: Optional[str] = None
     安全库存: Optional[str] = None
     批量大小: Optional[str] = None
+    舍入值: Optional[str] = None
     采购类型: Optional[str] = None
     收货处理时间: Optional[str] = None
+    计划交货时间: Optional[str] = None
     MRP区域: Optional[str] = None
     反冲: Optional[str] = None
     批量输入: Optional[str] = None
@@ -93,10 +95,10 @@ def init_db():
      备注1 TEXT,
      备注2 TEXT,
      生产厂商 TEXT,
-     检测周期 TEXT,
-     最小批量大小 TEXT,
-     舍入值 TEXT,
-     计划交货时间 TEXT,
+     检测时间QC TEXT,
+     最小批量大小PUR TEXT,
+     舍入值PUR TEXT,
+     计划交货时间PUR TEXT,
      MRP控制者 TEXT,
      MRP类型 TEXT,
      批量程序 TEXT,
@@ -104,8 +106,10 @@ def init_db():
      再订货点 TEXT,
      安全库存 TEXT,
      批量大小 TEXT,
+     舍入值 TEXT,
      采购类型 TEXT,
      收货处理时间 TEXT,
+     计划交货时间 TEXT,
      MRP区域 TEXT,
      反冲 TEXT,
      批量输入 TEXT,
@@ -199,25 +203,25 @@ async def save_materials(materials: List[Material], user = Depends(authenticate_
             material.新建时间 = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             c.execute('''
             INSERT INTO materials (
-                物料, 物料描述, 市场, 备注1, 备注2, 生产厂商, 检测周期, 最小批量大小, 
-                舍入值, 计划交货时间, MRP控制者, MRP类型, 批量程序, 固定批量, 再订货点, 
-                安全库存, 批量大小, 采购类型, 收货处理时间, MRP区域, 反冲, 批量输入, 
+                物料, 物料描述, 市场, 备注1, 备注2, 生产厂商, 检测时间QC, 最小批量大小PUR, 
+                舍入值PUR, 计划交货时间PUR, MRP控制者, MRP类型, 批量程序, 固定批量, 再订货点, 
+                安全库存, 批量大小, 舍入值, 采购类型, 收货处理时间, 计划交货时间, MRP区域, 反冲, 批量输入, 
                 自制生产时间, 策略组, 综合MRP, 消耗模式, 向后跨期期间, 向后跨期时间, 
                 独立集中, 计划时间界, 生产评估, 生产计划, 新建时间, 完成时间
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
-                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 material.物料, material.物料描述, material.市场, material.备注1, material.备注2,
-                material.生产厂商, material.检测周期, material.最小批量大小, material.舍入值,
-                material.计划交货时间, material.MRP控制者, material.MRP类型, material.批量程序,
+                material.生产厂商, material.检测时间QC, material.最小批量大小PUR, material.舍入值PUR,
+                material.计划交货时间PUR, material.MRP控制者, material.MRP类型, material.批量程序,
                 material.固定批量, material.再订货点, material.安全库存, material.批量大小,
-                material.采购类型, material.收货处理时间, material.MRP区域, material.反冲,
-                material.批量输入, material.自制生产时间, material.策略组, material.综合MRP,
-                material.消耗模式, material.向后跨期期间, material.向后跨期时间, material.独立集中,
-                material.计划时间界, material.生产评估, material.生产计划, material.新建时间,
-                material.完成时间
+                material.舍入值, material.采购类型, material.收货处理时间, material.计划交货时间,
+                material.MRP区域, material.反冲, material.批量输入, material.自制生产时间,
+                material.策略组, material.综合MRP, material.消耗模式, material.向后跨期期间,
+                material.向后跨期时间, material.独立集中, material.计划时间界, material.生产评估,
+                material.生产计划, material.新建时间, material.完成时间
             ))
-        
+            
         conn.commit()
         conn.close()
         return {"message": f"成功导入 {len(valid_materials)} 条数据"}
@@ -268,8 +272,8 @@ async def update_material(
     # 检查权限
     allowed_fields = {
         '运营管理部': ['MRP控制者'],
-        '采购部': ['最小批量大小', '舍入值', '计划交货时间'],
-        'QC检测室': ['检测周期']
+        '采购部': ['最小批量大小PUR', '舍入值PUR', '计划交货时间PUR'],
+        'QC检测室': ['检测时间QC']
     }
     
     if user["department"] not in allowed_fields or update_data.field not in allowed_fields[user["department"]]:
@@ -308,14 +312,14 @@ async def get_export_materials(user = Depends(authenticate_user)):
         # 获取所有需要的字段都已填写但完成时间为空的数据
         c.execute('''
             SELECT * FROM materials 
-            WHERE 检测周期 IS NOT NULL 
-            AND 检测周期 != ''
-            AND 最小批量大小 IS NOT NULL 
-            AND 最小批量大小 != ''
-            AND 舍入值 IS NOT NULL 
-            AND 舍入值 != ''
-            AND 计划交货时间 IS NOT NULL 
-            AND 计划交货时间 != ''
+            WHERE 检测时间QC IS NOT NULL 
+            AND 检测时间QC != ''
+            AND 最小批量大小PUR IS NOT NULL 
+            AND 最小批量大小PUR != ''
+            AND 舍入值PUR IS NOT NULL 
+            AND 舍入值PUR != ''
+            AND 计划交货时间PUR IS NOT NULL 
+            AND 计划交货时间PUR != ''
             AND MRP控制者 IS NOT NULL 
             AND MRP控制者 != ''
             AND (完成时间 IS NULL OR 完成时间 = '')
@@ -349,3 +353,37 @@ async def get_export_materials(user = Depends(authenticate_user)):
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"} 
+
+# 修改计算字段更新的权限检查
+@app.put("/materials/{material_id}/calculated-fields")
+async def update_calculated_fields(
+    material_id: str,
+    calculated_fields: dict,
+    user = Depends(authenticate_user)
+):
+    # 允许所有部门在计算时更新字段
+    if user["department"] not in ["信息部", "运营管理部", "采购部", "QC检测室"]:
+        raise HTTPException(status_code=403, detail="无权修改计算字段")
+    
+    try:
+        conn = sqlite3.connect('materials.db')
+        c = conn.cursor()
+        
+        # 构建更新语句
+        update_fields = ', '.join([f"{k} = ?" for k in calculated_fields.keys()])
+        query = f'UPDATE materials SET {update_fields} WHERE 物料 = ?'
+        
+        # 执行更新
+        c.execute(query, list(calculated_fields.values()) + [material_id])
+        
+        if c.rowcount == 0:
+            conn.close()
+            raise HTTPException(status_code=404, detail="物料不存在")
+        
+        conn.commit()
+        conn.close()
+        return {"message": "更新成功"}
+        
+    except Exception as e:
+        print(f"Error updating calculated fields: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e)) 
