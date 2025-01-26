@@ -16,6 +16,7 @@ FROM nginx:stable-alpine as production-stage
 
 # 复制构建产物
 COPY --from=build-stage /app/dist /usr/share/nginx/html
+COPY env.template.js /usr/share/nginx/html/env.js
 RUN ls -la /usr/share/nginx/html/
 
 # 复制 nginx 配置

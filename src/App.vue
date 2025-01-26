@@ -176,12 +176,12 @@ const loginForm = ref({
 })
 
 // 修改 API_BASE_URL 的定义
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+const API_BASE_URL = (window as any).ENV?.API_BASE_URL || ''
 
 // 权限控制
 const canImport = computed(() => department.value === '信息部')
 const canExport = computed(() => department.value === '信息部')
-
+ 
 const getEditableColumns = computed(() => {
   switch (department.value) {
     case '运营管理部':
