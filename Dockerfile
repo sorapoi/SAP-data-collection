@@ -27,6 +27,9 @@ RUN chown -R nginx:nginx /usr/share/nginx/html && \
 EXPOSE 80
 
 # 设置环境变量默认值，使用.env.production中的值
-ENV API_BASE_URL=http://backend:8000
+ENV VITE_API_BASE_URL=http://backend:8000
+ENV NGINX_ENVSUBST_TEMPLATE_DIR=/etc/nginx/templates
+ENV NGINX_ENVSUBST_TEMPLATE_SUFFIX=.template
+ENV NGINX_ENVSUBST_OUTPUT_DIR=/etc/nginx/conf.d
 
 CMD ["nginx", "-g", "daemon off;"] 
