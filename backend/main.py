@@ -17,10 +17,13 @@ load_dotenv()
 SECRET_KEY = os.getenv("SECRET_KEY")
 security = HTTPBearer()
 
+# 从环境变量获取 CORS 配置
+CORS_ORIGINS = eval(os.getenv("CORS_ORIGINS", '["http://localhost"]'))
+
 # 允许跨域
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost", "http://localhost:80", "http://frontend"],
+    allow_origins=CORS_ORIGINS,  # 使用环境变量中的配置
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -34,10 +37,22 @@ class User(BaseModel):
 class Material(BaseModel):
     物料: str
     物料描述: str
+    物料组: Optional[str] = None
     市场: Optional[str] = None
     备注1: Optional[str] = None
     备注2: Optional[str] = None
     生产厂商: Optional[str] = None
+    评估分类: Optional[str] = None
+    销售订单库存: Optional[str] = None
+    价格确定: Optional[str] = None
+    价格控制: Optional[str] = None
+    标准价格: Optional[str] = None
+    价格单位: Optional[str] = None
+    用QS的成本核算: Optional[str] = None
+    物料来源: Optional[str] = None
+    差异码: Optional[str] = None
+    物料状态: Optional[str] = None
+    成本核算批量: Optional[str] = None
     检测时间QC: Optional[str] = None
     最小批量大小PUR: Optional[str] = None
     舍入值PUR: Optional[str] = None
@@ -91,10 +106,22 @@ def init_db():
     (id INTEGER PRIMARY KEY AUTOINCREMENT,
      物料 TEXT,
      物料描述 TEXT,
+     物料组 TEXT,
      市场 TEXT,
      备注1 TEXT,
      备注2 TEXT,
      生产厂商 TEXT,
+     评估分类 TEXT,
+     销售订单库存 TEXT,
+     价格确定 TEXT,
+     价格控制 TEXT,
+     标准价格 TEXT,
+     价格单位 TEXT,
+     用QS的成本核算 TEXT,
+     物料来源 TEXT,
+     差异码 TEXT,
+     物料状态 TEXT,
+     成本核算批量 TEXT,
      检测时间QC TEXT,
      最小批量大小PUR TEXT,
      舍入值PUR TEXT,
@@ -133,7 +160,8 @@ def init_db():
     ('op1', 'password', '运营管理部'),
     ('pur1', 'password', '采购部'),
     ('it1', 'password', '信息部'),
-    ('qc1', 'password', 'QC检测室')
+    ('qc1', 'password', 'QC检测室'),
+    ('fin1', 'password', '财务部')
     ''')
     
     conn.commit()
@@ -201,18 +229,27 @@ async def save_materials(materials: List[Material], user = Depends(authenticate_
         # 保存数据
         for material in valid_materials:
             material.新建时间 = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            # 计算自动填充字段
+            calculate_fields(material)
+            
             c.execute('''
             INSERT INTO materials (
-                物料, 物料描述, 市场, 备注1, 备注2, 生产厂商, 检测时间QC, 最小批量大小PUR, 
-                舍入值PUR, 计划交货时间PUR, MRP控制者, MRP类型, 批量程序, 固定批量, 再订货点, 
-                安全库存, 批量大小, 舍入值, 采购类型, 收货处理时间, 计划交货时间, MRP区域, 反冲, 批量输入, 
-                自制生产时间, 策略组, 综合MRP, 消耗模式, 向后跨期期间, 向后跨期时间, 
-                独立集中, 计划时间界, 生产评估, 生产计划, 新建时间, 完成时间
+                物料, 物料描述, 物料组, 市场, 备注1, 备注2, 生产厂商, 评估分类, 销售订单库存, 
+                价格确定, 价格控制, 标准价格, 价格单位, 用QS的成本核算, 物料来源, 差异码, 
+                物料状态, 成本核算批量, 检测时间QC, 最小批量大小PUR, 舍入值PUR, 计划交货时间PUR, 
+                MRP控制者, MRP类型, 批量程序, 固定批量, 再订货点, 安全库存, 批量大小, 舍入值, 
+                采购类型, 收货处理时间, 计划交货时间, MRP区域, 反冲, 批量输入, 自制生产时间, 
+                策略组, 综合MRP, 消耗模式, 向后跨期期间, 向后跨期时间, 独立集中, 计划时间界, 
+                生产评估, 生产计划, 新建时间, 完成时间
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
-                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
+                     ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
-                material.物料, material.物料描述, material.市场, material.备注1, material.备注2,
-                material.生产厂商, material.检测时间QC, material.最小批量大小PUR, material.舍入值PUR,
+                material.物料, material.物料描述, material.物料组, material.市场, material.备注1, 
+                material.备注2, material.生产厂商, material.评估分类, material.销售订单库存,
+                material.价格确定, material.价格控制, material.标准价格, material.价格单位,
+                material.用QS的成本核算, material.物料来源, material.差异码, material.物料状态,
+                material.成本核算批量, material.检测时间QC, material.最小批量大小PUR, material.舍入值PUR,
                 material.计划交货时间PUR, material.MRP控制者, material.MRP类型, material.批量程序,
                 material.固定批量, material.再订货点, material.安全库存, material.批量大小,
                 material.舍入值, material.采购类型, material.收货处理时间, material.计划交货时间,
@@ -248,8 +285,32 @@ async def get_materials(
     # 计算偏移量
     offset = (page - 1) * page_size
     
+    # 根据部门筛选可见字段
+    if user["department"] == "信息部":
+        # 信息部可以看到所有字段
+        fields = "*"
+    elif user["department"] == "财务部":
+        # 财务部能看到基础字段、财务相关字段、以及时间字段
+        fields = '''
+            id, 物料, 物料描述, 物料组, 市场, 备注1, 备注2, 生产厂商,
+            评估分类, 销售订单库存, 价格确定, 价格控制, 标准价格, 价格单位,
+            用QS的成本核算, 物料来源, 差异码, 物料状态, 成本核算批量,
+            新建时间, 完成时间
+        '''
+    else:
+        # 其他部门看不到财务相关字段
+        fields = '''
+            id, 物料, 物料描述, 物料组, 市场, 备注1, 备注2, 生产厂商,
+            检测时间QC, 最小批量大小PUR, 舍入值PUR, 计划交货时间PUR,
+            MRP控制者, MRP类型, 批量程序, 固定批量, 再订货点,
+            安全库存, 批量大小, 舍入值, 采购类型, 收货处理时间,
+            计划交货时间, MRP区域, 反冲, 批量输入, 自制生产时间,
+            策略组, 综合MRP, 消耗模式, 向后跨期期间, 向后跨期时间,
+            独立集中, 计划时间界, 生产评估, 生产计划, 新建时间, 完成时间
+        '''
+    
     # 获取分页数据
-    c.execute('SELECT * FROM materials LIMIT ? OFFSET ?', (page_size, offset))
+    c.execute(f'SELECT {fields} FROM materials LIMIT ? OFFSET ?', (page_size, offset))
     columns = [description[0] for description in c.description]
     result = [dict(zip(columns, row)) for row in c.fetchall()]
     conn.close()
@@ -260,7 +321,7 @@ async def get_materials(
         "page": page,
         "page_size": page_size,
         "total_pages": (total + page_size - 1) // page_size
-    } 
+    }
 
 # 修改更新物料数据的接口
 @app.put("/materials/{material_id}")
@@ -273,7 +334,9 @@ async def update_material(
     allowed_fields = {
         '运营管理部': ['MRP控制者'],
         '采购部': ['最小批量大小PUR', '舍入值PUR', '计划交货时间PUR'],
-        'QC检测室': ['检测时间QC']
+        'QC检测室': ['检测时间QC'],
+        '财务部': ['评估分类', '销售订单库存', '价格确定', '价格控制', '标准价格', 
+                '价格单位', '用QS的成本核算', '物料来源', '差异码', '物料状态', '成本核算批量']
     }
     
     if user["department"] not in allowed_fields or update_data.field not in allowed_fields[user["department"]]:
@@ -322,6 +385,8 @@ async def get_export_materials(user = Depends(authenticate_user)):
             AND 计划交货时间PUR != ''
             AND MRP控制者 IS NOT NULL 
             AND MRP控制者 != ''
+            AND 标准价格 IS NOT NULL
+            AND 标准价格 != ''
             AND (完成时间 IS NULL OR 完成时间 = '')
         ''')
         
@@ -387,3 +452,58 @@ async def update_calculated_fields(
     except Exception as e:
         print(f"Error updating calculated fields: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e)) 
+
+def calculate_fields(material: Material):
+    # 获取物料号第一个数字
+    first_char = material.物料[0] if material.物料 else ''
+    material_group = material.物料组[:2] if material.物料组 else ''
+    
+    # 设置默认值
+    material.价格确定 = "3"
+    material.价格控制 = "S"
+    material.价格单位 = "1"
+    material.用QS的成本核算 = "X"
+    material.物料来源 = "X"
+    
+    # 差异码逻辑
+    if first_char in ['4', '5']:
+        material.差异码 = "000001"
+    else:
+        material.差异码 = "NA"
+    
+    # 物料状态逻辑
+    if first_char in ['4', '5']:
+        material.物料状态 = "Z1"
+    else:
+        material.物料状态 = "NA"
+    
+    # 成本核算批量逻辑
+    if first_char in ['1', '2', '5']:
+        material.成本核算批量 = "10000"
+    else:
+        material.成本核算批量 = "NA"
+    
+    # 评估类和销售订单库存逻辑
+    has_processing = "进料加工" in (material.物料描述 or "")
+    
+    # 初始化销售订单库存为 NA
+    material.销售订单库存 = "NA"
+    
+    if first_char == '1':
+        if material_group == '11':
+            material.评估分类 = "3010" if has_processing else "3000"
+        elif material_group == '12':
+            material.评估分类 = "3100"
+    elif first_char == '2':
+        material.评估分类 = "3200"
+    elif first_char == '4':
+        material.评估分类 = "7910" if has_processing else "7900"
+    elif first_char == '5':
+        if has_processing:
+            material.评估分类 = "7940"
+            material.销售订单库存 = "7940"
+        else:
+            material.评估分类 = "7930"
+            material.销售订单库存 = "7930"
+    
+    return material  # 确保返回修改后的对象

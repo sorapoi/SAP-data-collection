@@ -55,7 +55,14 @@
                     >
                   </template>
                   <template v-else>
-                    {{ row[header] }}
+                    <div v-if="header === '物料描述' || header === '生产厂商'" 
+                         class="truncate-cell" 
+                         :title="row[header]">
+                      {{ row[header] }}
+                    </div>
+                    <template v-else>
+                      {{ row[header] }}
+                    </template>
                   </template>
                 </td>
               </tr>
@@ -97,6 +104,7 @@ import axios from 'axios'
 interface MaterialRow {
   '物料': string;
   '物料描述': string;
+  '物料组': string;
   '市场': string;
   '备注1': string;
   '备注2': string;
@@ -138,15 +146,35 @@ const pageSize = ref(15)
 const totalPages = ref(0)
 const totalItems = ref(0)
 const tableData = ref<MaterialRow[]>([])
-const headers = [
-  '物料', '物料描述', '市场', '备注1', '备注2', '生产厂商', 
-  '检测时间QC', '最小批量大小PUR', '舍入值PUR', '计划交货时间PUR', 
-  'MRP控制者', 'MRP类型', '批量程序', '固定批量', '再订货点', 
-  '安全库存', '批量大小', '舍入值', '采购类型', '收货处理时间', 
-  '计划交货时间', 'MRP区域', '反冲', '批量输入', '自制生产时间', 
-  '策略组', '综合MRP', '消耗模式', '向后跨期期间', '向后跨期时间', 
-  '独立集中', '计划时间界', '生产评估', '生产计划', '新建时间', '完成时间'
-]
+const headers = computed(() => {
+  const baseHeaders = [
+    '物料', '物料描述', '物料组', '市场', '备注1', '备注2', '生产厂商'
+  ]
+  
+  const financeHeaders = [
+    '评估分类', '销售订单库存', '价格确定', '价格控制', '标准价格', '价格单位',
+    '用QS的成本核算', '物料来源', '差异码', '物料状态', '成本核算批量'
+  ]
+  
+  const timeHeaders = ['新建时间', '完成时间']  // 添加时间相关列
+  
+  const otherHeaders = [
+    '检测时间QC', '最小批量大小PUR', '舍入值PUR', '计划交货时间PUR',
+    'MRP控制者', 'MRP类型', '批量程序', '固定批量', '再订货点', 
+    '安全库存', '批量大小', '舍入值', '采购类型', '收货处理时间', 
+    '计划交货时间', 'MRP区域', '反冲', '批量输入', '自制生产时间', 
+    '策略组', '综合MRP', '消耗模式', '向后跨期期间', '向后跨期时间', 
+    '独立集中', '计划时间界', '生产评估', '生产计划'
+  ]
+  
+  // 根据部门返回不同的列
+  if (department.value === '信息部') {
+    return [...baseHeaders, ...financeHeaders, ...otherHeaders, ...timeHeaders]
+  } else if (department.value === '财务部') {
+    return [...baseHeaders, ...financeHeaders, ...timeHeaders]
+  }
+  return [...baseHeaders, ...otherHeaders, ...timeHeaders]
+})
 
 // MRP控制者选项
 const mrpControllers = [
@@ -176,7 +204,9 @@ const loginForm = ref({
 })
 
 // 修改 API_BASE_URL 的定义
-const API_BASE_URL = (window as any).ENV?.API_BASE_URL || ''
+const API_BASE_URL = import.meta.env.MODE === 'development' 
+  ? 'http://localhost:8000'  // 开发环境
+  : import.meta.env.VITE_API_BASE_URL || 'http://backend:8000'  // 生产环境
 
 // 权限控制
 const canImport = computed(() => department.value === '信息部')
@@ -190,6 +220,9 @@ const getEditableColumns = computed(() => {
       return ['最小批量大小PUR', '舍入值PUR', '计划交货时间PUR']
     case 'QC检测室':
       return ['检测时间QC']
+    case '财务部':
+      return ['评估分类', '销售订单库存', '价格确定', '价格控制', '标准价格', 
+              '价格单位', '用QS的成本核算', '物料来源', '差异码', '物料状态', '成本核算批量']
     default:
       return []
   }
@@ -300,6 +333,7 @@ const handleFileUpload = async (event: Event) => {
       .map(row => ({
         物料: row.物料?.trim() || '',
         物料描述: row.物料描述?.trim() || '',
+        物料组: row.物料组?.trim() || null,
         市场: row.市场?.trim() || null,
         备注1: row.备注1?.trim() || null,
         备注2: row.备注2?.trim() || null,
@@ -784,19 +818,21 @@ button:hover {
 
 .table-wrapper {
   margin-top: 20px;
+  overflow-x: auto;  /* 允许表格横向滚动 */
 }
 
 table {
   border-collapse: collapse;
-  width: 100%;
+  width: max-content;  /* 表格宽度根据内容自动调整 */
+  min-width: 100%;    /* 但不小于容器宽度 */
 }
 
 th, td {
   padding: 8px;
   text-align: left;
   border: 1px solid #ddd;
-  white-space: nowrap;
-  min-width: 120px;
+  white-space: nowrap;  /* 防止内容换行 */
+  width: 1px;          /* 让列宽自动适应内容 */
 }
 
 th {
@@ -819,6 +855,7 @@ tr:hover {
   background-color: #f5f5f5;
 }
 
+/* 输入框样式 */
 input {
   width: 100%;
   padding: 4px;
@@ -829,16 +866,6 @@ input {
 input:focus {
   outline: 2px solid #4CAF50;
   background: white;
-}
-
-/* 可编辑单元格的样式 */
-td:has(input), td:has(select) {
-  background-color: rgba(76, 175, 80, 0.05);
-}
-
-/* 输入错误提示 */
-input:invalid {
-  border-color: #ff5252;
 }
 
 /* 添加下拉框样式 */
@@ -853,6 +880,11 @@ select {
 select:focus {
   outline: 2px solid #4CAF50;
   background: white;
+}
+
+/* 可编辑单元格的样式 */
+td:has(input), td:has(select) {
+  background-color: rgba(76, 175, 80, 0.05);
 }
 
 .pagination {
@@ -908,5 +940,22 @@ select:focus {
   backdrop-filter: blur(10px);
   margin: 20px auto;
   max-width: 95%;
+}
+
+/* 截断单元格样式 */
+.truncate-cell {
+  max-width: 300px;  /* 约20个中文字符的宽度 */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 确保其他单元格样式不变 */
+th, td {
+  padding: 8px;
+  text-align: left;
+  border: 1px solid #ddd;
+  white-space: nowrap;
+  width: 1px;
 }
 </style>
