@@ -292,11 +292,22 @@ def authenticate_user(credentials: HTTPAuthorizationCredentials = Depends(securi
 async def login(user: User):
     conn = get_db_connection()
     c = conn.cursor()
-    c.execute('''
-        SELECT department, need_change_password 
-        FROM users 
-        WHERE username=? AND password=?
-    ''', (user.username, user.password))
+    
+    if os.getenv('ENV') == 'production':
+        # MariaDB 使用 %s 作为参数占位符
+        c.execute('''
+            SELECT department, need_change_password 
+            FROM users 
+            WHERE username=%s AND password=%s
+        ''', (user.username, user.password))
+    else:
+        # SQLite 使用 ? 作为参数占位符
+        c.execute('''
+            SELECT department, need_change_password 
+            FROM users 
+            WHERE username=? AND password=?
+        ''', (user.username, user.password))
+    
     result = c.fetchone()
     conn.close()
     
