@@ -115,24 +115,24 @@ class APIAuth(BaseModel):
 
 # 数据库连接函数
 def get_db_connection():
-    if os.getenv('ENV') == 'production':
-        try:
-            connection = mysql.connector.connect(
-                host=os.getenv('DB_HOST', '192.168.3.5'),
-                port=int(os.getenv('DB_PORT', '3306')),
-                database=os.getenv('DB_NAME', 'Sap'),
-                user=os.getenv('DB_USER', 'root'),
-                password=os.getenv('DB_PASSWORD', '19931225Yfl'),
-                charset='utf8mb4',
-                collation='utf8mb4_general_ci'
-            )
-            logger.info("Database connected successfully")
-            return connection
-        except Error as e:
-            logger.error(f"Database connection error: {str(e)}")
-            raise HTTPException(status_code=500, detail="Database connection error")
-    else:
-        return sqlite3.connect('materials.db')
+    try:
+        # 根据环境选择不同的数据库
+        db_name = 'Sap_test' if os.getenv('ENV') != 'production' else 'Sap'
+        
+        connection = mysql.connector.connect(
+            host=os.getenv('DB_HOST', '192.168.3.5'),
+            port=int(os.getenv('DB_PORT', '3306')),
+            database=db_name,
+            user=os.getenv('DB_USER', 'root'),
+            password=os.getenv('DB_PASSWORD', '19931225Yfl'),
+            charset='utf8mb4',
+            collation='utf8mb4_general_ci'
+        )
+        logger.info(f"Connected to database: {db_name}")
+        return connection
+    except Error as e:
+        logger.error(f"Database connection error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Database connection error")
 
 # 修改数据库初始化函数
 def init_db():
@@ -140,159 +140,88 @@ def init_db():
     c = conn.cursor()
     
     try:
-        if os.getenv('ENV') == 'production':
-            # 先创建用户表
+        # 创建用户表
+        c.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            username VARCHAR(50) PRIMARY KEY,
+            password VARCHAR(100),
+            department VARCHAR(50),
+            email VARCHAR(100),
+            need_change_password BOOLEAN DEFAULT TRUE
+        ) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci
+        ''')
+        
+        # 创建物料表
+        c.execute('''
+        CREATE TABLE IF NOT EXISTS materials (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            物料 VARCHAR(50),
+            物料描述 TEXT,
+            物料组 VARCHAR(50),
+            市场 VARCHAR(50),
+            备注1 TEXT,
+            备注2 TEXT,
+            生产厂商 TEXT,
+            评估分类 VARCHAR(20),
+            销售订单库存 VARCHAR(20),
+            价格确定 VARCHAR(10),
+            价格控制 VARCHAR(10),
+            标准价格 VARCHAR(20),
+            价格单位 VARCHAR(10),
+            用QS的成本核算 VARCHAR(10),
+            物料来源 VARCHAR(10),
+            差异码 VARCHAR(20),
+            物料状态 VARCHAR(10),
+            成本核算批量 VARCHAR(20),
+            检测时间QC VARCHAR(20),
+            最小批量大小PUR VARCHAR(20),
+            舍入值PUR VARCHAR(20),
+            计划交货时间PUR VARCHAR(20),
+            MRP控制者 VARCHAR(10),
+            MRP类型 VARCHAR(10),
+            批量程序 VARCHAR(20),
+            固定批量 VARCHAR(20),
+            再订货点 VARCHAR(20),
+            安全库存 VARCHAR(20),
+            批量大小 VARCHAR(20),
+            舍入值 VARCHAR(20),
+            采购类型 VARCHAR(20),
+            收货处理时间 VARCHAR(20),
+            计划交货时间 VARCHAR(20),
+            MRP区域 VARCHAR(10),
+            反冲 VARCHAR(10),
+            批量输入 VARCHAR(20),
+            自制生产时间 VARCHAR(20),
+            策略组 VARCHAR(20),
+            综合MRP VARCHAR(10),
+            消耗模式 VARCHAR(20),
+            向后跨期期间 VARCHAR(20),
+            向后跨期时间 VARCHAR(20),
+            独立集中 VARCHAR(20),
+            计划时间界 VARCHAR(20),
+            生产评估 VARCHAR(20),
+            生产计划 VARCHAR(20),
+            新建时间 VARCHAR(30),
+            完成时间 VARCHAR(30)
+        ) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci
+        ''')
+        
+        # 检查是否已存在默认用户
+        c.execute('SELECT username FROM users WHERE username=%s', ('admin',))
+        if not c.fetchone():
+            # 添加默认管理员用户
             c.execute('''
-            CREATE TABLE IF NOT EXISTS users (
-                username VARCHAR(50) PRIMARY KEY,
-                password VARCHAR(100),
-                department VARCHAR(50),
-                email VARCHAR(100),
-                need_change_password BOOLEAN DEFAULT TRUE
-            ) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci
-            ''')
-            conn.commit()
-            
-            # 再创建物料表
-            c.execute('''
-            CREATE TABLE IF NOT EXISTS materials (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                物料 VARCHAR(50),
-                物料描述 TEXT,
-                物料组 VARCHAR(50),
-                市场 VARCHAR(50),
-                备注1 TEXT,
-                备注2 TEXT,
-                生产厂商 TEXT,
-                评估分类 VARCHAR(20),
-                销售订单库存 VARCHAR(20),
-                价格确定 VARCHAR(10),
-                价格控制 VARCHAR(10),
-                标准价格 VARCHAR(20),
-                价格单位 VARCHAR(10),
-                用QS的成本核算 VARCHAR(10),
-                物料来源 VARCHAR(10),
-                差异码 VARCHAR(20),
-                物料状态 VARCHAR(10),
-                成本核算批量 VARCHAR(20),
-                检测时间QC VARCHAR(20),
-                最小批量大小PUR VARCHAR(20),
-                舍入值PUR VARCHAR(20),
-                计划交货时间PUR VARCHAR(20),
-                MRP控制者 VARCHAR(10),
-                MRP类型 VARCHAR(10),
-                批量程序 VARCHAR(20),
-                固定批量 VARCHAR(20),
-                再订货点 VARCHAR(20),
-                安全库存 VARCHAR(20),
-                批量大小 VARCHAR(20),
-                舍入值 VARCHAR(20),
-                采购类型 VARCHAR(20),
-                收货处理时间 VARCHAR(20),
-                计划交货时间 VARCHAR(20),
-                MRP区域 VARCHAR(10),
-                反冲 VARCHAR(10),
-                批量输入 VARCHAR(20),
-                自制生产时间 VARCHAR(20),
-                策略组 VARCHAR(20),
-                综合MRP VARCHAR(10),
-                消耗模式 VARCHAR(20),
-                向后跨期期间 VARCHAR(20),
-                向后跨期时间 VARCHAR(20),
-                独立集中 VARCHAR(20),
-                计划时间界 VARCHAR(20),
-                生产评估 VARCHAR(20),
-                生产计划 VARCHAR(20),
-                新建时间 VARCHAR(30),
-                完成时间 VARCHAR(30)
-            ) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci
-            ''')
-            conn.commit()
-            
-        else:
-            # 创建用户表
-
-            c.execute('''
-            CREATE TABLE IF NOT EXISTS users (
-                username TEXT PRIMARY KEY, 
-                password TEXT, 
-                department TEXT, 
-                email TEXT,
-                need_change_password BOOLEAN DEFAULT 1
-            )
-            ''')
-            
-            # 创建物料表
-            c.execute('''
-            CREATE TABLE IF NOT EXISTS materials
-            (id INTEGER PRIMARY KEY AUTOINCREMENT,
-             物料 TEXT,
-             物料描述 TEXT,
-             物料组 TEXT,
-             市场 TEXT,
-             备注1 TEXT,
-             备注2 TEXT,
-             生产厂商 TEXT,
-             评估分类 TEXT,
-             销售订单库存 TEXT,
-             价格确定 TEXT,
-             价格控制 TEXT,
-             标准价格 TEXT,
-             价格单位 TEXT,
-             用QS的成本核算 TEXT,
-             物料来源 TEXT,
-             差异码 TEXT,
-             物料状态 TEXT,
-             成本核算批量 TEXT,
-             检测时间QC TEXT,
-             最小批量大小PUR TEXT,
-             舍入值PUR TEXT,
-             计划交货时间PUR TEXT,
-             MRP控制者 TEXT,
-             MRP类型 TEXT,
-             批量程序 TEXT,
-             固定批量 TEXT,
-             再订货点 TEXT,
-             安全库存 TEXT,
-             批量大小 TEXT,
-             舍入值 TEXT,
-             采购类型 TEXT,
-             收货处理时间 TEXT,
-             计划交货时间 TEXT,
-             MRP区域 TEXT,
-             反冲 TEXT,
-             批量输入 TEXT,
-             自制生产时间 TEXT,
-             策略组 TEXT,
-             综合MRP TEXT,
-             消耗模式 TEXT,
-             向后跨期期间 TEXT,
-             向后跨期时间 TEXT,
-             独立集中 TEXT,
-             计划时间界 TEXT,
-             生产评估 TEXT,
-             生产计划 TEXT,
-             新建时间 TEXT,
-             完成时间 TEXT)
-            ''')
-            
-            # 插入默认用户
-            c.execute('''
-            INSERT OR IGNORE INTO users (username, password, department, email) VALUES 
-            ('op1', 'password', '运营管理部', 'op1@example.com'),
-            ('pur1', 'password', '采购部', 'pur1@example.com'),
-            ('it1', 'password', '信息部', 'it1@example.com'),
-            ('qc1', 'password', 'QC检测室', 'qc1@example.com'),
-            ('fin1', 'password', '财务部', 'fin1@example.com')
-            ''')
+                INSERT INTO users (username, password, department, need_change_password)
+                VALUES (%s, %s, %s, %s)
+            ''', ('admin', 'admin', '信息部', True))
         
         conn.commit()
-        return {"message": "数据保存成功"}
+        logger.info("Database initialized successfully")
         
     except Exception as e:
-        print(f"Error saving materials: {str(e)}")
+        logger.error(f"Database initialization error: {str(e)}")
         conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise
     
     finally:
         conn.close()

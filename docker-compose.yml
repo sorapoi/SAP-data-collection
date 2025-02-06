@@ -8,12 +8,12 @@ services:
     container_name: materials-backend
     restart: always
     environment:
-      - ENV=production
+      - ENV=production  # 或 development
       - SECRET_KEY=your_secret_key_here
       - CORS_ORIGINS=["*"]  # 允许所有源，仅用于测试
       - DB_HOST=192.168.3.5
       - DB_PORT=3306
-      - DB_NAME=Sap
+      - DB_NAME=Sap  # 生产环境使用 Sap，测试环境使用 Sap_test
       - DB_USER=root
       - DB_PASSWORD=19931225Yfl
     ports:
