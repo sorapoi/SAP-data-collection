@@ -2,7 +2,25 @@
   <div class="app-container" :style="bingWallpaperUrl ? { backgroundImage: `url(${bingWallpaperUrl})` } : {}">
     <!-- 登录部分 -->
     <div v-if="!isLoggedIn" class="login-container">
-      <div class="login-form">
+      <!-- 修改密码表单 -->
+      <div v-if="showChangePassword" class="login-form">
+        <h1>修改密码</h1>
+        <h2>首次登录或密码重置后需要修改密码</h2>
+        <input 
+          type="password" 
+          v-model="changePasswordForm.newPassword" 
+          placeholder="新密码"
+        >
+        <input 
+          type="password" 
+          v-model="changePasswordForm.confirmPassword" 
+          placeholder="确认新密码"
+        >
+        <button @click="handleChangePassword">确认修改</button>
+      </div>
+      
+      <!-- 登录表单 -->
+      <div v-else class="login-form">
         <h1>SAP数据收集系统</h1>
         <h2>用户登录</h2>
         <input v-model="loginForm.username" placeholder="用户名" type="text">
@@ -16,6 +34,8 @@
       <div class="user-info">
         <span>用户: {{ username }}</span>
         <span>部门: {{ department }}</span>
+        <button @click="openSettings">设置</button>
+        <button v-if="department === '信息部'" @click="openUserManagement">用户管理</button>
         <button @click="handleLogout">退出</button>
       </div>
 
@@ -93,6 +113,79 @@
         </div>
       </div>
     </div>
+
+    <!-- 设置对话框 -->
+    <div v-if="showSettings" class="modal">
+      <div class="modal-content">
+        <h2>个人设置</h2>
+        <div class="form-group">
+          <label>新密码{{ user?.need_change_password ? ' (必填)' : '' }}</label>
+          <input type="password" v-model="settingsForm.newPassword" placeholder="输入新密码">
+        </div>
+        <div class="form-group">
+          <label>确认密码</label>
+          <input type="password" v-model="settingsForm.confirmPassword" placeholder="确认新密码">
+        </div>
+        <div class="form-group">
+          <label>邮箱</label>
+          <input type="email" v-model="settingsForm.email" placeholder="输入邮箱">
+        </div>
+        <div class="modal-buttons">
+          <button @click="saveSettings">保存</button>
+          <button @click="closeSettings">取消</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 用户管理对话框 -->
+    <div v-if="showUserManagement" class="modal">
+      <div class="modal-content">
+        <h2>用户管理</h2>
+        
+        <!-- 添加用户表单 -->
+        <div class="add-user-form">
+          <h3>添加新用户</h3>
+          <div class="form-group">
+            <label>用户名</label>
+            <input type="text" v-model="newUser.username" placeholder="输入用户名">
+          </div>
+          <div class="form-group">
+            <label>部门</label>
+            <select v-model="newUser.department">
+              <option value="">请选择部门</option>
+              <option value="运营管理部">运营管理部</option>
+              <option value="采购部">采购部</option>
+              <option value="信息部">信息部</option>
+              <option value="QC检测室">QC检测室</option>
+              <option value="财务部">财务部</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>邮箱</label>
+            <input type="email" v-model="newUser.email" placeholder="输入邮箱">
+          </div>
+          <button @click="addUser" class="add-button">添加用户</button>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- 用户列表 -->
+        <div class="user-list">
+          <h3>现有用户</h3>
+          <div v-for="user in users" :key="user.username" class="user-item">
+            <div class="user-info">
+              <span class="username">{{ user.username }}</span>
+              <span class="department">({{ user.department }})</span>
+            </div>
+            <button @click="resetPassword(user.username)" class="reset-button">重置密码</button>
+          </div>
+        </div>
+        
+        <div class="modal-buttons">
+          <button @click="showUserManagement = false">关闭</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -137,6 +230,17 @@ interface MaterialRow {
   '生产计划': string;
   '新建时间': string;
   '完成时间': string;
+  '评估分类': string;
+  '销售订单库存': string;
+  '价格确定': string;
+  '价格控制': string;
+  '标准价格': string;
+  '价格单位': string;
+  '用QS的成本核算': string;
+  '物料来源': string;
+  '差异码': string;
+  '物料状态': string;
+  '成本核算批量': string;
   [key: string]: string;
 }
 
@@ -194,7 +298,7 @@ const mrpControllers = [
   { value: 'Z13', label: 'Z13 劳保用品' }
 ]
 
-// 登录相关
+// 登录相关状态
 const isLoggedIn = ref(false)
 const username = ref('')
 const department = ref('')
@@ -202,6 +306,14 @@ const loginForm = ref({
   username: '',
   password: ''
 })
+
+// 修改密码相关状态
+const showChangePassword = ref(false)
+const changePasswordForm = ref({
+  newPassword: '',
+  confirmPassword: ''
+})
+const tempToken = ref('') // 存储临时token
 
 // 修改 API_BASE_URL 的定义
 const API_BASE_URL = import.meta.env.MODE === 'development' 
@@ -232,14 +344,53 @@ const getEditableColumns = computed(() => {
 const handleLogin = async () => {
   try {
     const response = await axios.post(`${API_BASE_URL}/login`, loginForm.value)
-    localStorage.setItem('token', response.data.token)
-    username.value = loginForm.value.username
-    department.value = response.data.department
-    isLoggedIn.value = true
-    // 登录成功后加载数据(只需要一次)
-    await loadMaterials()
+    
+    if (response.data.need_change_password) {
+      // 如果需要修改密码，显示修改密码表单
+      showChangePassword.value = true
+      tempToken.value = response.data.token // 保存临时token
+      username.value = loginForm.value.username
+    } else {
+      // 不需要修改密码，正常登录
+      localStorage.setItem('token', response.data.token)
+      username.value = loginForm.value.username
+      department.value = response.data.department
+      isLoggedIn.value = true
+      // 登录成功后立即加载数据
+      await loadTableData()
+    }
   } catch (error) {
     alert('登录失败')
+  }
+}
+
+// 处理修改密码
+const handleChangePassword = async () => {
+  if (!changePasswordForm.value.newPassword || 
+      changePasswordForm.value.newPassword !== changePasswordForm.value.confirmPassword) {
+    alert('两次输入的密码不一致')
+    return
+  }
+
+  try {
+    await axios.put(`${API_BASE_URL}/user/settings`, {
+      newPassword: changePasswordForm.value.newPassword
+    }, {
+      headers: { Authorization: `Bearer ${tempToken.value}` }
+    })
+    
+    // 密码修改成功后，使用新密码自动重新登录
+    loginForm.value.password = changePasswordForm.value.newPassword
+    showChangePassword.value = false
+    changePasswordForm.value.newPassword = ''
+    changePasswordForm.value.confirmPassword = ''
+    // 直接设置登录状态并加载数据，避免重复调用登录接口
+    localStorage.setItem('token', tempToken.value)
+    isLoggedIn.value = true
+    department.value = user.value?.department || ''
+    await loadTableData()
+  } catch (error) {
+    alert('修改密码失败')
   }
 }
 
@@ -367,7 +518,18 @@ const handleFileUpload = async (event: Event) => {
         生产评估: row.生产评估?.trim() || null,
         生产计划: row.生产计划?.trim() || null,
         新建时间: null,
-        完成时间: null
+        完成时间: null,
+        评估分类: row.评估分类?.trim() || null,
+        销售订单库存: row.销售订单库存?.trim() || null,
+        价格确定: row.价格确定?.trim() || null,
+        价格控制: row.价格控制?.trim() || null,
+        标准价格: row.标准价格?.trim() || null,
+        价格单位: row.价格单位?.trim() || null,
+        用QS的成本核算: row.用QS的成本核算?.trim() || null,
+        物料来源: row.物料来源?.trim() || null,
+        差异码: row.差异码?.trim() || null,
+        物料状态: row.物料状态?.trim() || null,
+        成本核算批量: row.成本核算批量?.trim() || null
       }))
 
     if (processedData.length === 0) {
@@ -747,6 +909,181 @@ const updateCalculatedFields = async (row: MaterialRow) => {
     alert('更新计算字段失败')
   }
 }
+
+// 设置相关的状态
+const showSettings = ref(false)
+const settingsForm = ref({
+  newPassword: '',
+  confirmPassword: '',
+  email: ''
+})
+
+// 用户管理相关的状态
+const showUserManagement = ref(false)
+const users = ref<Array<{username: string, department: string}>>([])
+
+// 打开设置对话框
+const openSettings = () => {
+  showSettings.value = true
+  // 获取当前用户的邮箱信息
+  loadUserSettings()
+}
+
+// 加载用户设置
+const loadUserSettings = async () => {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/user/settings`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+    })
+    settingsForm.value.email = response.data.email
+  } catch (error) {
+    console.error('加载用户设置失败:', error)
+  }
+}
+
+// 修改保存设置函数
+const saveSettings = async () => {
+  if (!settingsForm.value.newPassword) {
+    if (user.value?.need_change_password) {
+      alert('必须修改密码')
+      return
+    }
+  }
+
+  if (settingsForm.value.newPassword && 
+      settingsForm.value.newPassword !== settingsForm.value.confirmPassword) {
+    alert('两次输入的密码不一致')
+    return
+  }
+
+  try {
+    await axios.put(`${API_BASE_URL}/user/settings`, {
+      newPassword: settingsForm.value.newPassword,
+      email: settingsForm.value.email
+    }, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+    })
+    alert('设置保存成功')
+    showSettings.value = false
+    settingsForm.value.newPassword = ''
+    settingsForm.value.confirmPassword = ''
+    
+    // 如果是强制修改密码，保存后刷新页面重新登录
+    if (user.value?.need_change_password) {
+      handleLogout()
+    }
+  } catch (error) {
+    alert('保存设置失败')
+  }
+}
+
+// 修改设置对话框，添加关闭按钮的处理
+const closeSettings = () => {
+  if (user.value?.need_change_password) {
+    alert('必须先修改密码')
+    return
+  }
+  showSettings.value = false
+}
+
+// 打开用户管理
+const openUserManagement = async () => {
+  showUserManagement.value = true
+  await loadUsers()
+}
+
+// 加载用户列表
+const loadUsers = async () => {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/users`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+    })
+    users.value = response.data
+  } catch (error) {
+    console.error('加载用户列表失败:', error)
+  }
+}
+
+// 重置用户密码
+const resetPassword = async (username: string) => {
+  if (!confirm(`确定要重置用户 ${username} 的密码吗？`)) return
+  
+  try {
+    await axios.post(`${API_BASE_URL}/users/${username}/reset-password`, {}, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+    })
+    alert('密码重置成功')
+  } catch (error) {
+    alert('密码重置失败')
+  }
+}
+
+// 添加用户状态
+const user = ref<{
+  username: string;
+  department: string;
+  need_change_password: boolean;
+} | null>(null)
+
+// 加载表格数据的函数
+const loadTableData = async () => {
+  try {
+    const response = await axios.get(
+      `${API_BASE_URL}/materials?page=${currentPage.value}&page_size=${pageSize.value}`,
+      {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      }
+    )
+    tableData.value = response.data.items
+    totalItems.value = response.data.total
+    totalPages.value = response.data.total_pages
+  } catch (error) {
+    console.error('加载数据失败:', error)
+  }
+}
+
+// 新用户表单状态
+const newUser = ref({
+  username: '',
+  department: '',
+  email: ''
+})
+
+// 添加用户函数
+const addUser = async () => {
+  // 表单验证
+  if (!newUser.value.username || !newUser.value.department) {
+    alert('请填写用户名和部门')
+    return
+  }
+
+  try {
+    await axios.post(
+      `${API_BASE_URL}/users`, 
+      newUser.value,
+      {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      }
+    )
+    
+    // 清空表单
+    newUser.value = {
+      username: '',
+      department: '',
+      email: ''
+    }
+    
+    // 重新加载用户列表
+    await loadUsers()
+    alert('添加用户成功')
+  } catch (error: any) {
+    if (error.response?.status === 409) {
+      alert('用户名已存在')
+    } else {
+      alert('添加用户失败')
+    }
+  }
+}
 </script>
 
 <style scoped>
@@ -929,7 +1266,8 @@ td:has(input), td:has(select) {
   text-align: center;
   color: #666;
   margin-bottom: 20px;
-  font-size: 18px;
+  font-size: 16px;
+  line-height: 1.4;
 }
 
 .main-content {
@@ -957,5 +1295,120 @@ th, td {
   border: 1px solid #ddd;
   white-space: nowrap;
   width: 1px;
+}
+
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  min-width: 400px;
+  max-width: 600px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.form-group {
+  margin-bottom: 15px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 5px;
+}
+
+.form-group input {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.modal-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.user-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.user-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px;
+  border-bottom: 1px solid #eee;
+}
+
+.user-item button {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.add-user-form {
+  margin-bottom: 20px;
+  padding: 15px;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+}
+
+.add-user-form h3 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  color: #2c3e50;
+}
+
+.divider {
+  height: 1px;
+  background-color: #ddd;
+  margin: 20px 0;
+}
+
+.user-list h3 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  color: #2c3e50;
+}
+
+.user-info {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.username {
+  font-weight: bold;
+}
+
+.department {
+  color: #666;
+}
+
+.add-button {
+  background-color: #4CAF50;
+  width: 100%;
+  margin-top: 10px;
+}
+
+.reset-button {
+  background-color: #ff9800;
+  padding: 4px 8px;
+  font-size: 12px;
 }
 </style>

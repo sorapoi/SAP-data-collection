@@ -7,6 +7,7 @@ WORKDIR /app/materials
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
+    default-mysql-client \
     && rm -rf /var/lib/apt/lists/*
 
 # 复制依赖文件并安装
@@ -22,6 +23,7 @@ COPY main.py .
 # 设置环境变量
 ENV PYTHONUNBUFFERED=1
 ENV DATABASE_PATH=/app/materials/data/materials.db
+ENV ENV=production
 
 # 暴露端口
 EXPOSE 8000
