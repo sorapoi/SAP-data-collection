@@ -10,7 +10,7 @@ services:
     environment:
       - ENV=production
       - SECRET_KEY=your_secret_key_here
-      - CORS_ORIGINS=["http://localhost", "http://localhost:80", "http://localhost:5173", "http://frontend"]
+      - CORS_ORIGINS=["*"]  # 允许所有源，仅用于测试
       - DB_HOST=192.168.3.5
       - DB_PORT=3306
       - DB_NAME=Sap

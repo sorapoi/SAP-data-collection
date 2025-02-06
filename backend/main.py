@@ -20,12 +20,12 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 security = HTTPBearer()
 
 # 从环境变量获取 CORS 配置
-CORS_ORIGINS = eval(os.getenv("CORS_ORIGINS", '["http://localhost"]'))
+CORS_ORIGINS = eval(os.getenv("CORS_ORIGINS", '["*"]'))  # 允许所有源，仅用于测试
 
 # 允许跨域
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=CORS_ORIGINS,  # 使用环境变量中的配置
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
