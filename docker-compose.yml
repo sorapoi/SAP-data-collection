@@ -34,6 +34,8 @@ services:
       dockerfile: Dockerfile
     container_name: materials-frontend
     restart: always
+    environment:
+      - VITE_API_BASE_URL=http://materials-backend:8000
     ports:
       - "80:80"
     depends_on:
@@ -43,4 +45,5 @@ services:
 
 networks:
   app-network:
+    name: materials_network
     driver: bridge 
