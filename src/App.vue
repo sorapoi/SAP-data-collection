@@ -318,7 +318,7 @@ const tempToken = ref('') // 存储临时token
 // 修改 API_BASE_URL 的定义
 const API_BASE_URL = import.meta.env.MODE === 'development' 
   ? 'http://localhost:8000'  // 开发环境
-  : import.meta.env.VITE_API_BASE_URL || 'http://backend:8000'  // 生产环境
+  : import.meta.env.VITE_API_BASE_URL || 'http://materials-backend:8000'  // 生产环境
 
 // 权限控制
 const canImport = computed(() => department.value === '信息部')
