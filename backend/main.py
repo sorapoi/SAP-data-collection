@@ -116,10 +116,11 @@ def get_db_connection():
                 database=os.getenv('DB_NAME', 'Sap'),
                 user=os.getenv('DB_USER', 'root'),
                 password=os.getenv('DB_PASSWORD', '19931225Yfl'),
-                charset='utf8',
-                collation='utf8_general_ci'
+                charset='utf8mb4',
+                collation='utf8mb4_general_ci'
             )
             return connection
+
         except Error as e:
             print(f"Error connecting to MariaDB: {e}")
             raise HTTPException(status_code=500, detail="Database connection error")
@@ -140,9 +141,10 @@ def init_db():
             department VARCHAR(50),
             email VARCHAR(100),
             need_change_password BOOLEAN DEFAULT TRUE
-        ) CHARACTER SET utf8 COLLATE utf8_general_ci
+        ) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci
         ''')
         
+
         c.execute('''
         CREATE TABLE IF NOT EXISTS materials (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -194,10 +196,11 @@ def init_db():
             生产计划 VARCHAR(50),
             新建时间 VARCHAR(50),
             完成时间 VARCHAR(50)
-        ) CHARACTER SET utf8 COLLATE utf8_general_ci
+        ) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci
         ''')
     else:
         # 创建用户表
+
         c.execute('''
         CREATE TABLE IF NOT EXISTS users (
             username TEXT PRIMARY KEY, 
