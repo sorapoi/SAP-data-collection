@@ -3,7 +3,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from datetime import datetime
 from typing import List, Optional
-import sqlite3
 import jwt
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
@@ -242,20 +241,13 @@ async def login(user: User):
     conn = get_db_connection()
     c = conn.cursor()
     
-    if os.getenv('ENV') == 'production':
-        # MariaDB 使用 %s 作为参数占位符
-        c.execute('''
-            SELECT department, need_change_password 
-            FROM users 
-            WHERE username=%s AND password=%s
-        ''', (user.username, user.password))
-    else:
-        # SQLite 使用 ? 作为参数占位符
-        c.execute('''
-            SELECT department, need_change_password 
-            FROM users 
-            WHERE username=? AND password=?
-        ''', (user.username, user.password))
+
+    # MariaDB 使用 %s 作为参数占位符
+    c.execute('''
+        SELECT department, need_change_password 
+        FROM users 
+        WHERE username=%s AND password=%s
+    ''', (user.username, user.password))
     
     result = c.fetchone()
     conn.close()
@@ -287,96 +279,52 @@ async def save_materials(materials: List[Material], user = Depends(authenticate_
     c = conn.cursor()
     
     try:
-        if os.getenv('ENV') == 'production':
-            # MariaDB 版本
-            for material in materials:
-                # 添加新建时间和计算字段
-                material.新建时间 = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                calculate_fields(material)  # 计算自动填充字段
+        # MariaDB 版本
+        for material in materials:
+            # 添加新建时间和计算字段
+            material.新建时间 = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            calculate_fields(material)  # 计算自动填充字段
+            
+            # 检查物料是否已存在
+            c.execute('SELECT 物料 FROM materials WHERE 物料=%s', (material.物料,))
+            existing = c.fetchone()
+            
+            if existing:
+                # 更新现有记录
+                update_fields = []
+                update_values = []
                 
-                # 检查物料是否已存在
-                c.execute('SELECT 物料 FROM materials WHERE 物料=%s', (material.物料,))
-                existing = c.fetchone()
+                for field, value in material.dict().items():
+                    if field != '物料' and value is not None:  # 跳过主键和空值
+                        update_fields.append(f"{field}=%s")
+                        update_values.append(value)
                 
-                if existing:
-                    # 更新现有记录
-                    update_fields = []
-                    update_values = []
-                    
-                    for field, value in material.dict().items():
-                        if field != '物料' and value is not None:  # 跳过主键和空值
-                            update_fields.append(f"{field}=%s")
-                            update_values.append(value)
-                    
-                    if update_fields:
-                        update_values.append(material.物料)  # 添加 WHERE 条件的值
-                        query = f'''
-                            UPDATE materials 
-                            SET {', '.join(update_fields)}
-                            WHERE 物料=%s
-                        '''
-                        c.execute(query, update_values)
-                else:
-                    # 插入新记录
-                    fields = []
-                    values = []
-                    placeholders = []
-                    
-                    for field, value in material.dict().items():
-                        if value is not None:  # 跳过空值
-                            fields.append(field)
-                            values.append(value)
-                            placeholders.append('%s')
-                    
+                if update_fields:
+                    update_values.append(material.物料)  # 添加 WHERE 条件的值
                     query = f'''
-                        INSERT INTO materials 
-                        ({', '.join(fields)})
-                        VALUES ({', '.join(placeholders)})
+                        UPDATE materials 
+                        SET {', '.join(update_fields)}
+                        WHERE 物料=%s
                     '''
-                    c.execute(query, values)
-        else:
-            # SQLite 版本
-            for material in materials:
-                # 检查物料是否已存在
-                c.execute('SELECT 物料 FROM materials WHERE 物料=?', (material.物料,))
-                existing = c.fetchone()
+                    c.execute(query, update_values)
+            else:
+                # 插入新记录
+                fields = []
+                values = []
+                placeholders = []
                 
-                if existing:
-                    # 更新现有记录
-                    update_fields = []
-                    update_values = []
-                    
-                    for field, value in material.dict().items():
-                        if field != '物料' and value is not None:
-                            update_fields.append(f"{field}=?")
-                            update_values.append(value)
-                    
-                    if update_fields:
-                        update_values.append(material.物料)
-                        query = f'''
-                            UPDATE materials 
-                            SET {', '.join(update_fields)}
-                            WHERE 物料=?
-                        '''
-                        c.execute(query, update_values)
-                else:
-                    # 插入新记录
-                    fields = []
-                    values = []
-                    placeholders = []
-                    
-                    for field, value in material.dict().items():
-                        if value is not None:
-                            fields.append(field)
-                            values.append(value)
-                            placeholders.append('?')
-                    
-                    query = f'''
-                        INSERT INTO materials 
-                        ({', '.join(fields)})
-                        VALUES ({', '.join(placeholders)})
-                    '''
-                    c.execute(query, values)
+                for field, value in material.dict().items():
+                    if value is not None:  # 跳过空值
+                        fields.append(field)
+                        values.append(value)
+                        placeholders.append('%s')
+                
+                query = f'''
+                    INSERT INTO materials 
+                    ({', '.join(fields)})
+                    VALUES ({', '.join(placeholders)})
+                '''
+                c.execute(query, values)
         
         conn.commit()
         return {"message": "数据保存成功"}
@@ -399,56 +347,59 @@ async def get_materials(
     conn = get_db_connection()
     c = conn.cursor()
     
-    # 获取总记录数
-    c.execute('SELECT COUNT(*) FROM materials')
-    total = c.fetchone()[0]
-    
-    # 计算偏移量
-    offset = (page - 1) * page_size
-    
-    # 根据部门筛选可见字段
-    if user["department"] == "信息部":
-        # 信息部可以看到所有字段
-        fields = "*"
-    elif user["department"] == "财务部":
-        # 财务部能看到基础字段、财务相关字段、以及时间字段
-        fields = '''
-            id, 物料, 物料描述, 物料组, 市场, 备注1, 备注2, 生产厂商,
-            评估分类, 销售订单库存, 价格确定, 价格控制, 标准价格, 价格单位,
-            用QS的成本核算, 物料来源, 差异码, 物料状态, 成本核算批量,
-            新建时间, 完成时间
-        '''
-    else:
-        # 其他部门看不到财务相关字段
-        fields = '''
-            id, 物料, 物料描述, 物料组, 市场, 备注1, 备注2, 生产厂商,
-            检测时间QC, 最小批量大小PUR, 舍入值PUR, 计划交货时间PUR,
-            MRP控制者, MRP类型, 批量程序, 固定批量, 再订货点,
-            安全库存, 批量大小, 舍入值, 采购类型, 收货处理时间,
-            计划交货时间, MRP区域, 反冲, 批量输入, 自制生产时间,
-            策略组, 综合MRP, 消耗模式, 向后跨期期间, 向后跨期时间,
-            独立集中, 计划时间界, 生产评估, 生产计划, 新建时间, 完成时间
-        '''
-    
-    # 根据不同数据库使用不同的分页语法
-    if os.getenv('ENV') == 'production':
-        # MariaDB 版本
-        c.execute(f'SELECT {fields} FROM materials LIMIT %s OFFSET %s', (page_size, offset))
-    else:
-        # SQLite 版本
-        c.execute(f'SELECT {fields} FROM materials LIMIT ? OFFSET ?', (page_size, offset))
-    
-    columns = [description[0] for description in c.description]
-    result = [dict(zip(columns, row)) for row in c.fetchall()]
-    conn.close()
-    
-    return {
-        "total": total,
-        "items": result,
-        "page": page,
-        "page_size": page_size,
-        "total_pages": (total + page_size - 1) // page_size
-    }
+    try:
+        # 获取总记录数
+        c.execute('SELECT COUNT(*) FROM materials')
+        total = c.fetchone()[0]
+        
+        # 计算偏移量
+        offset = (page - 1) * page_size
+        
+        # 根据部门筛选可见字段
+        if user["department"] == "信息部":
+            # 信息部可以看到所有字段
+            fields = "*"
+        elif user["department"] == "财务部":
+            # 财务部能看到基础字段、财务相关字段、以及时间字段
+            fields = '''
+                id, 物料, 物料描述, 物料组, 市场, 备注1, 备注2, 生产厂商,
+                评估分类, 销售订单库存, 价格确定, 价格控制, 标准价格, 价格单位,
+                用QS的成本核算, 物料来源, 差异码, 物料状态, 成本核算批量,
+                新建时间, 完成时间
+            '''
+        else:
+            # 其他部门看不到财务相关字段
+            fields = '''
+                id, 物料, 物料描述, 物料组, 市场, 备注1, 备注2, 生产厂商,
+                检测时间QC, 最小批量大小PUR, 舍入值PUR, 计划交货时间PUR,
+                MRP控制者, MRP类型, 批量程序, 固定批量, 再订货点,
+                安全库存, 批量大小, 舍入值, 采购类型, 收货处理时间,
+                计划交货时间, MRP区域, 反冲, 批量输入, 自制生产时间,
+                策略组, 综合MRP, 消耗模式, 向后跨期期间, 向后跨期时间,
+                独立集中, 计划时间界, 生产评估, 生产计划, 新建时间, 完成时间
+            '''
+        
+        # 构建完整的 SQL 查询
+        query = f'SELECT {fields} FROM materials LIMIT %s OFFSET %s'
+        c.execute(query, (int(page_size), int(offset)))
+        
+        columns = [description[0] for description in c.description]
+        result = [dict(zip(columns, row)) for row in c.fetchall()]
+        
+        return {
+            "total": total,
+            "items": result,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": (total + page_size - 1) // page_size
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting materials: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+        
+    finally:
+        conn.close()
 
 # 修改更新物料数据的接口
 @app.put("/materials/{material_id}")
@@ -474,20 +425,22 @@ async def update_material(
         c = conn.cursor()
         
         # 更新字段
-        c.execute(f'UPDATE materials SET {update_data.field} = ? WHERE 物料 = ?', 
+        c.execute(f'UPDATE materials SET {update_data.field} = %s WHERE 物料 = %s', 
                  (update_data.value, material_id))
         
         if c.rowcount == 0:
-            conn.close()
             raise HTTPException(status_code=404, detail="物料不存在")
         
         conn.commit()
-        conn.close()
         return {"message": "更新成功"}
         
     except Exception as e:
-        print(f"Error updating material: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e)) 
+        logger.error(f"Error updating material: {str(e)}")
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+        
+    finally:
+        conn.close()
 
 # 获取待导出的数据
 @app.get("/materials/export")
@@ -525,21 +478,24 @@ async def get_export_materials(user = Depends(authenticate_user)):
             material_ids = [row['物料'] for row in result]
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             
-            placeholders = ','.join(['?' for _ in material_ids])
+            # 修改这里，使用 MariaDB 语法
+            placeholders = ','.join(['%s' for _ in material_ids])
             c.execute(f'''
                 UPDATE materials 
-                SET 完成时间 = ? 
+                SET 完成时间 = %s 
                 WHERE 物料 IN ({placeholders})
             ''', [current_time] + material_ids)
             
             conn.commit()
             
-        conn.close()
         return result
         
     except Exception as e:
-        print(f"Error exporting materials: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e)) 
+        logger.error(f"Error exporting materials: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+        
+    finally:
+        conn.close()
 
 # 添加健康检查端点
 @app.get("/health")
@@ -562,8 +518,8 @@ async def update_calculated_fields(
         c = conn.cursor()
         
         # 构建更新语句
-        update_fields = ', '.join([f"{k} = ?" for k in calculated_fields.keys()])
-        query = f'UPDATE materials SET {update_fields} WHERE 物料 = ?'
+        update_fields = ', '.join([f"{k} = %s" for k in calculated_fields.keys()])
+        query = f'UPDATE materials SET {update_fields} WHERE 物料 = %s'
         
         # 执行更新
         c.execute(query, list(calculated_fields.values()) + [material_id])
@@ -640,10 +596,11 @@ def calculate_fields(material: Material):
 async def get_user_settings(user = Depends(authenticate_user)):
     conn = get_db_connection()
     c = conn.cursor()
-    c.execute('SELECT email FROM users WHERE username = ?', (user["username"],))
+    c.execute('SELECT email FROM users WHERE username = %s', (user["username"],))
     result = c.fetchone()
     conn.close()
     return {"email": result[0] if result else None}
+
 
 # 更新用户设置
 @app.put("/user/settings")
@@ -655,20 +612,23 @@ async def update_user_settings(settings: UserSettings, user = Depends(authentica
     values = []
     
     if settings.newPassword:
-        updates.append("password = ?")
+        updates.append("password = %s")
         values.append(settings.newPassword)
-        updates.append("need_change_password = ?")
+        updates.append("need_change_password = %s")
         values.append(False)
+
     
     if settings.email is not None:
-        updates.append("email = ?")
+        updates.append("email = %s")
         values.append(settings.email)
     
+
     if updates:
-        query = f"UPDATE users SET {', '.join(updates)} WHERE username = ?"
+        query = f"UPDATE users SET {', '.join(updates)} WHERE username = %s"
         values.append(user["username"])
         c.execute(query, values)
         conn.commit()
+
     
     conn.close()
     return {"message": "设置更新成功"}
@@ -698,9 +658,10 @@ async def reset_user_password(username: str, user = Depends(authenticate_user)):
     # 重置密码并设置需要修改密码标志
     c.execute('''
         UPDATE users 
-        SET password = ?, need_change_password = ? 
-        WHERE username = ?
+        SET password = %s, need_change_password = %s 
+        WHERE username = %s
     ''', ("password", True, username))
+
     
     if c.rowcount == 0:
         conn.close()
@@ -719,27 +680,34 @@ async def create_user(new_user: NewUser, user = Depends(authenticate_user)):
     conn = get_db_connection()
     c = conn.cursor()
     
-    # 检查用户名是否已存在
-    c.execute('SELECT username FROM users WHERE username = ?', (new_user.username,))
-    if c.fetchone():
+    try:
+        # 检查用户名是否已存在
+        c.execute('SELECT username FROM users WHERE username=%s', (new_user.username,))
+        if c.fetchone():
+            raise HTTPException(status_code=409, detail="用户名已存在")
+        
+        # 创建新用户，设置默认密码为 "password"
+        c.execute('''
+            INSERT INTO users (username, password, department, email, need_change_password)
+            VALUES (%s, %s, %s, %s, %s)
+        ''', (
+            new_user.username,
+            "password",  # 默认密码
+            new_user.department,
+            new_user.email,
+            True  # 需要修改密码
+        ))
+        
+        conn.commit()
+        return {"message": "用户创建成功"}
+        
+    except Exception as e:
+        logger.error(f"Error creating user: {str(e)}")
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+        
+    finally:
         conn.close()
-        raise HTTPException(status_code=409, detail="用户名已存在")
-    
-    # 创建新用户，设置默认密码为 "password"
-    c.execute('''
-        INSERT INTO users (username, password, department, email, need_change_password)
-        VALUES (?, ?, ?, ?, ?)
-    ''', (
-        new_user.username,
-        "password",  # 默认密码
-        new_user.department,
-        new_user.email,
-        True  # 需要修改密码
-    ))
-    
-    conn.commit()
-    conn.close()
-    return {"message": "用户创建成功"}
 
 # 添加API认证中间件
 def verify_api_key(api_auth: APIAuth):
@@ -834,12 +802,14 @@ async def api_export_materials(api_auth: APIAuth):
             material_ids = [row['物料'] for row in result]
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             
-            placeholders = ','.join(['?' for _ in material_ids])
+            placeholders = ','.join(['%s' for _ in material_ids])
             c.execute(f'''
                 UPDATE materials 
-                SET 完成时间 = ? 
+                SET 完成时间 = %s 
                 WHERE 物料 IN ({placeholders})
             ''', [current_time] + material_ids)
+
+
             
             conn.commit()
         
