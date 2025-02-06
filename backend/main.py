@@ -10,6 +10,13 @@ from dotenv import load_dotenv
 import os
 import mysql.connector
 from mysql.connector import Error
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
@@ -119,10 +126,10 @@ def get_db_connection():
                 charset='utf8mb4',
                 collation='utf8mb4_general_ci'
             )
+            logger.info("Database connected successfully")
             return connection
-
         except Error as e:
-            print(f"Error connecting to MariaDB: {e}")
+            logger.error(f"Database connection error: {str(e)}")
             raise HTTPException(status_code=500, detail="Database connection error")
     else:
         return sqlite3.connect('materials.db')
@@ -132,150 +139,163 @@ def init_db():
     conn = get_db_connection()
     c = conn.cursor()
     
-    if os.getenv('ENV') == 'production':
-        # MariaDB 表创建语句
-        c.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            username VARCHAR(50) PRIMARY KEY,
-            password VARCHAR(100),
-            department VARCHAR(50),
-            email VARCHAR(100),
-            need_change_password BOOLEAN DEFAULT TRUE
-        ) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci
-        ''')
-        
-        c.execute('''
-        CREATE TABLE IF NOT EXISTS materials (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            物料 VARCHAR(50),
-            物料描述 TEXT,
-            物料组 VARCHAR(50),
-            市场 VARCHAR(50),
-            备注1 TEXT,
-            备注2 TEXT,
-            生产厂商 TEXT,
-            评估分类 VARCHAR(20),
-            销售订单库存 VARCHAR(20),
-            价格确定 VARCHAR(10),
-            价格控制 VARCHAR(10),
-            标准价格 VARCHAR(20),
-            价格单位 VARCHAR(10),
-            用QS的成本核算 VARCHAR(10),
-            物料来源 VARCHAR(10),
-            差异码 VARCHAR(20),
-            物料状态 VARCHAR(10),
-            成本核算批量 VARCHAR(20),
-            检测时间QC VARCHAR(20),
-            最小批量大小PUR VARCHAR(20),
-            舍入值PUR VARCHAR(20),
-            计划交货时间PUR VARCHAR(20),
-            MRP控制者 VARCHAR(10),
-            MRP类型 VARCHAR(10),
-            批量程序 VARCHAR(20),
-            固定批量 VARCHAR(20),
-            再订货点 VARCHAR(20),
-            安全库存 VARCHAR(20),
-            批量大小 VARCHAR(20),
-            舍入值 VARCHAR(20),
-            采购类型 VARCHAR(20),
-            收货处理时间 VARCHAR(20),
-            计划交货时间 VARCHAR(20),
-            MRP区域 VARCHAR(10),
-            反冲 VARCHAR(10),
-            批量输入 VARCHAR(20),
-            自制生产时间 VARCHAR(20),
-            策略组 VARCHAR(20),
-            综合MRP VARCHAR(10),
-            消耗模式 VARCHAR(20),
-            向后跨期期间 VARCHAR(20),
-            向后跨期时间 VARCHAR(20),
-            独立集中 VARCHAR(20),
-            计划时间界 VARCHAR(20),
-            生产评估 VARCHAR(20),
-            生产计划 VARCHAR(20),
-            新建时间 VARCHAR(30),
-            完成时间 VARCHAR(30)
-        ) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci
-        ''')
-    else:
-        # 创建用户表
+    try:
+        if os.getenv('ENV') == 'production':
+            # 先创建用户表
+            c.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                username VARCHAR(50) PRIMARY KEY,
+                password VARCHAR(100),
+                department VARCHAR(50),
+                email VARCHAR(100),
+                need_change_password BOOLEAN DEFAULT TRUE
+            ) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci
+            ''')
+            conn.commit()
+            
+            # 再创建物料表
+            c.execute('''
+            CREATE TABLE IF NOT EXISTS materials (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                物料 VARCHAR(50),
+                物料描述 TEXT,
+                物料组 VARCHAR(50),
+                市场 VARCHAR(50),
+                备注1 TEXT,
+                备注2 TEXT,
+                生产厂商 TEXT,
+                评估分类 VARCHAR(20),
+                销售订单库存 VARCHAR(20),
+                价格确定 VARCHAR(10),
+                价格控制 VARCHAR(10),
+                标准价格 VARCHAR(20),
+                价格单位 VARCHAR(10),
+                用QS的成本核算 VARCHAR(10),
+                物料来源 VARCHAR(10),
+                差异码 VARCHAR(20),
+                物料状态 VARCHAR(10),
+                成本核算批量 VARCHAR(20),
+                检测时间QC VARCHAR(20),
+                最小批量大小PUR VARCHAR(20),
+                舍入值PUR VARCHAR(20),
+                计划交货时间PUR VARCHAR(20),
+                MRP控制者 VARCHAR(10),
+                MRP类型 VARCHAR(10),
+                批量程序 VARCHAR(20),
+                固定批量 VARCHAR(20),
+                再订货点 VARCHAR(20),
+                安全库存 VARCHAR(20),
+                批量大小 VARCHAR(20),
+                舍入值 VARCHAR(20),
+                采购类型 VARCHAR(20),
+                收货处理时间 VARCHAR(20),
+                计划交货时间 VARCHAR(20),
+                MRP区域 VARCHAR(10),
+                反冲 VARCHAR(10),
+                批量输入 VARCHAR(20),
+                自制生产时间 VARCHAR(20),
+                策略组 VARCHAR(20),
+                综合MRP VARCHAR(10),
+                消耗模式 VARCHAR(20),
+                向后跨期期间 VARCHAR(20),
+                向后跨期时间 VARCHAR(20),
+                独立集中 VARCHAR(20),
+                计划时间界 VARCHAR(20),
+                生产评估 VARCHAR(20),
+                生产计划 VARCHAR(20),
+                新建时间 VARCHAR(30),
+                完成时间 VARCHAR(30)
+            ) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci
+            ''')
+            conn.commit()
+            
+        else:
+            # 创建用户表
 
-        c.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            username TEXT PRIMARY KEY, 
-            password TEXT, 
-            department TEXT, 
-            email TEXT,
-            need_change_password BOOLEAN DEFAULT 1
-        )
-        ''')
+            c.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                username TEXT PRIMARY KEY, 
+                password TEXT, 
+                department TEXT, 
+                email TEXT,
+                need_change_password BOOLEAN DEFAULT 1
+            )
+            ''')
+            
+            # 创建物料表
+            c.execute('''
+            CREATE TABLE IF NOT EXISTS materials
+            (id INTEGER PRIMARY KEY AUTOINCREMENT,
+             物料 TEXT,
+             物料描述 TEXT,
+             物料组 TEXT,
+             市场 TEXT,
+             备注1 TEXT,
+             备注2 TEXT,
+             生产厂商 TEXT,
+             评估分类 TEXT,
+             销售订单库存 TEXT,
+             价格确定 TEXT,
+             价格控制 TEXT,
+             标准价格 TEXT,
+             价格单位 TEXT,
+             用QS的成本核算 TEXT,
+             物料来源 TEXT,
+             差异码 TEXT,
+             物料状态 TEXT,
+             成本核算批量 TEXT,
+             检测时间QC TEXT,
+             最小批量大小PUR TEXT,
+             舍入值PUR TEXT,
+             计划交货时间PUR TEXT,
+             MRP控制者 TEXT,
+             MRP类型 TEXT,
+             批量程序 TEXT,
+             固定批量 TEXT,
+             再订货点 TEXT,
+             安全库存 TEXT,
+             批量大小 TEXT,
+             舍入值 TEXT,
+             采购类型 TEXT,
+             收货处理时间 TEXT,
+             计划交货时间 TEXT,
+             MRP区域 TEXT,
+             反冲 TEXT,
+             批量输入 TEXT,
+             自制生产时间 TEXT,
+             策略组 TEXT,
+             综合MRP TEXT,
+             消耗模式 TEXT,
+             向后跨期期间 TEXT,
+             向后跨期时间 TEXT,
+             独立集中 TEXT,
+             计划时间界 TEXT,
+             生产评估 TEXT,
+             生产计划 TEXT,
+             新建时间 TEXT,
+             完成时间 TEXT)
+            ''')
+            
+            # 插入默认用户
+            c.execute('''
+            INSERT OR IGNORE INTO users (username, password, department, email) VALUES 
+            ('op1', 'password', '运营管理部', 'op1@example.com'),
+            ('pur1', 'password', '采购部', 'pur1@example.com'),
+            ('it1', 'password', '信息部', 'it1@example.com'),
+            ('qc1', 'password', 'QC检测室', 'qc1@example.com'),
+            ('fin1', 'password', '财务部', 'fin1@example.com')
+            ''')
         
-        # 创建物料表
-        c.execute('''
-        CREATE TABLE IF NOT EXISTS materials
-        (id INTEGER PRIMARY KEY AUTOINCREMENT,
-         物料 TEXT,
-         物料描述 TEXT,
-         物料组 TEXT,
-         市场 TEXT,
-         备注1 TEXT,
-         备注2 TEXT,
-         生产厂商 TEXT,
-         评估分类 TEXT,
-         销售订单库存 TEXT,
-         价格确定 TEXT,
-         价格控制 TEXT,
-         标准价格 TEXT,
-         价格单位 TEXT,
-         用QS的成本核算 TEXT,
-         物料来源 TEXT,
-         差异码 TEXT,
-         物料状态 TEXT,
-         成本核算批量 TEXT,
-         检测时间QC TEXT,
-         最小批量大小PUR TEXT,
-         舍入值PUR TEXT,
-         计划交货时间PUR TEXT,
-         MRP控制者 TEXT,
-         MRP类型 TEXT,
-         批量程序 TEXT,
-         固定批量 TEXT,
-         再订货点 TEXT,
-         安全库存 TEXT,
-         批量大小 TEXT,
-         舍入值 TEXT,
-         采购类型 TEXT,
-         收货处理时间 TEXT,
-         计划交货时间 TEXT,
-         MRP区域 TEXT,
-         反冲 TEXT,
-         批量输入 TEXT,
-         自制生产时间 TEXT,
-         策略组 TEXT,
-         综合MRP TEXT,
-         消耗模式 TEXT,
-         向后跨期期间 TEXT,
-         向后跨期时间 TEXT,
-         独立集中 TEXT,
-         计划时间界 TEXT,
-         生产评估 TEXT,
-         生产计划 TEXT,
-         新建时间 TEXT,
-         完成时间 TEXT)
-        ''')
+        conn.commit()
+        return {"message": "数据保存成功"}
         
-        # 插入默认用户
-        c.execute('''
-        INSERT OR IGNORE INTO users (username, password, department, email) VALUES 
-        ('op1', 'password', '运营管理部', 'op1@example.com'),
-        ('pur1', 'password', '采购部', 'pur1@example.com'),
-        ('it1', 'password', '信息部', 'it1@example.com'),
-        ('qc1', 'password', 'QC检测室', 'qc1@example.com'),
-        ('fin1', 'password', '财务部', 'fin1@example.com')
-        ''')
+    except Exception as e:
+        print(f"Error saving materials: {str(e)}")
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
     
-    conn.commit()
-    conn.close()
+    finally:
+        conn.close()
 
 init_db()
 
@@ -331,74 +351,114 @@ async def login(user: User):
 # 保存物料数据
 @app.post("/materials")
 async def save_materials(materials: List[Material], user = Depends(authenticate_user)):
+    if user["department"] != "信息部":
+        raise HTTPException(status_code=403, detail="无权导入数据")
+    
+    conn = get_db_connection()
+    c = conn.cursor()
+    
     try:
-        if user["department"] not in ["信息部", "运营管理部", "采购部", "QC检测室"]:
-            raise HTTPException(status_code=403, detail="Unauthorized")
+        if os.getenv('ENV') == 'production':
+            # MariaDB 版本
+            for material in materials:
+                # 添加新建时间和计算字段
+                material.新建时间 = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                calculate_fields(material)  # 计算自动填充字段
+                
+                # 检查物料是否已存在
+                c.execute('SELECT 物料 FROM materials WHERE 物料=%s', (material.物料,))
+                existing = c.fetchone()
+                
+                if existing:
+                    # 更新现有记录
+                    update_fields = []
+                    update_values = []
+                    
+                    for field, value in material.dict().items():
+                        if field != '物料' and value is not None:  # 跳过主键和空值
+                            update_fields.append(f"{field}=%s")
+                            update_values.append(value)
+                    
+                    if update_fields:
+                        update_values.append(material.物料)  # 添加 WHERE 条件的值
+                        query = f'''
+                            UPDATE materials 
+                            SET {', '.join(update_fields)}
+                            WHERE 物料=%s
+                        '''
+                        c.execute(query, update_values)
+                else:
+                    # 插入新记录
+                    fields = []
+                    values = []
+                    placeholders = []
+                    
+                    for field, value in material.dict().items():
+                        if value is not None:  # 跳过空值
+                            fields.append(field)
+                            values.append(value)
+                            placeholders.append('%s')
+                    
+                    query = f'''
+                        INSERT INTO materials 
+                        ({', '.join(fields)})
+                        VALUES ({', '.join(placeholders)})
+                    '''
+                    c.execute(query, values)
+        else:
+            # SQLite 版本
+            for material in materials:
+                # 检查物料是否已存在
+                c.execute('SELECT 物料 FROM materials WHERE 物料=?', (material.物料,))
+                existing = c.fetchone()
+                
+                if existing:
+                    # 更新现有记录
+                    update_fields = []
+                    update_values = []
+                    
+                    for field, value in material.dict().items():
+                        if field != '物料' and value is not None:
+                            update_fields.append(f"{field}=?")
+                            update_values.append(value)
+                    
+                    if update_fields:
+                        update_values.append(material.物料)
+                        query = f'''
+                            UPDATE materials 
+                            SET {', '.join(update_fields)}
+                            WHERE 物料=?
+                        '''
+                        c.execute(query, update_values)
+                else:
+                    # 插入新记录
+                    fields = []
+                    values = []
+                    placeholders = []
+                    
+                    for field, value in material.dict().items():
+                        if value is not None:
+                            fields.append(field)
+                            values.append(value)
+                            placeholders.append('?')
+                    
+                    query = f'''
+                        INSERT INTO materials 
+                        ({', '.join(fields)})
+                        VALUES ({', '.join(placeholders)})
+                    '''
+                    c.execute(query, values)
         
-        conn = get_db_connection()
-        c = conn.cursor()
-        
-        # 过滤掉物料为空的数据
-        valid_materials = [m for m in materials if m.物料.strip()]
-        
-        # 检查重复数据
-        duplicates = []
-        for material in valid_materials:
-            c.execute('SELECT 物料 FROM materials WHERE 物料 = ?', (material.物料,))
-            if c.fetchone():
-                duplicates.append(material.物料)
-        
-        if duplicates:
-            conn.close()
-            raise HTTPException(
-                status_code=400,
-                detail={
-                    "message": "发现重复数据",
-                    "duplicates": duplicates
-                }
-            )
-        
-        # 保存数据
-        for material in valid_materials:
-            material.新建时间 = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            # 计算自动填充字段
-            calculate_fields(material)
-            
-            c.execute('''
-            INSERT INTO materials (
-                物料, 物料描述, 物料组, 市场, 备注1, 备注2, 生产厂商, 评估分类, 销售订单库存, 
-                价格确定, 价格控制, 标准价格, 价格单位, 用QS的成本核算, 物料来源, 差异码, 
-                物料状态, 成本核算批量, 检测时间QC, 最小批量大小PUR, 舍入值PUR, 计划交货时间PUR, 
-                MRP控制者, MRP类型, 批量程序, 固定批量, 再订货点, 安全库存, 批量大小, 舍入值, 
-                采购类型, 收货处理时间, 计划交货时间, MRP区域, 反冲, 批量输入, 自制生产时间, 
-                策略组, 综合MRP, 消耗模式, 向后跨期期间, 向后跨期时间, 独立集中, 计划时间界, 
-                生产评估, 生产计划, 新建时间, 完成时间
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
-                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
-                     ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                material.物料, material.物料描述, material.物料组, material.市场, material.备注1, 
-                material.备注2, material.生产厂商, material.评估分类, material.销售订单库存,
-                material.价格确定, material.价格控制, material.标准价格, material.价格单位,
-                material.用QS的成本核算, material.物料来源, material.差异码, material.物料状态,
-                material.成本核算批量, material.检测时间QC, material.最小批量大小PUR, material.舍入值PUR,
-                material.计划交货时间PUR, material.MRP控制者, material.MRP类型, material.批量程序,
-                material.固定批量, material.再订货点, material.安全库存, material.批量大小,
-                material.舍入值, material.采购类型, material.收货处理时间, material.计划交货时间,
-                material.MRP区域, material.反冲, material.批量输入, material.自制生产时间,
-                material.策略组, material.综合MRP, material.消耗模式, material.向后跨期期间,
-                material.向后跨期时间, material.独立集中, material.计划时间界, material.生产评估,
-                material.生产计划, material.新建时间, material.完成时间
-            ))
-            
         conn.commit()
-        conn.close()
-        return {"message": f"成功导入 {len(valid_materials)} 条数据"}
-    except HTTPException:
-        raise
+        return {"message": "数据保存成功"}
+        
     except Exception as e:
         print(f"Error saving materials: {str(e)}")
+        conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+    
+    finally:
+        conn.close()
 
 # 获取物料数据
 @app.get("/materials")
@@ -441,8 +501,14 @@ async def get_materials(
             独立集中, 计划时间界, 生产评估, 生产计划, 新建时间, 完成时间
         '''
     
-    # 获取分页数据
-    c.execute(f'SELECT {fields} FROM materials LIMIT ? OFFSET ?', (page_size, offset))
+    # 根据不同数据库使用不同的分页语法
+    if os.getenv('ENV') == 'production':
+        # MariaDB 版本
+        c.execute(f'SELECT {fields} FROM materials LIMIT %s OFFSET %s', (page_size, offset))
+    else:
+        # SQLite 版本
+        c.execute(f'SELECT {fields} FROM materials LIMIT ? OFFSET ?', (page_size, offset))
+    
     columns = [description[0] for description in c.description]
     result = [dict(zip(columns, row)) for row in c.fetchall()]
     conn.close()
