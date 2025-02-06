@@ -115,7 +115,9 @@ def get_db_connection():
                 port=int(os.getenv('DB_PORT', '3306')),
                 database=os.getenv('DB_NAME', 'Sap'),
                 user=os.getenv('DB_USER', 'root'),
-                password=os.getenv('DB_PASSWORD', '19931225Yfl')
+                password=os.getenv('DB_PASSWORD', '19931225Yfl'),
+                charset='utf8',
+                collation='utf8_general_ci'
             )
             return connection
         except Error as e:
@@ -138,7 +140,7 @@ def init_db():
             department VARCHAR(50),
             email VARCHAR(100),
             need_change_password BOOLEAN DEFAULT TRUE
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+        ) CHARACTER SET utf8 COLLATE utf8_general_ci
         ''')
         
         c.execute('''
@@ -192,7 +194,7 @@ def init_db():
             生产计划 VARCHAR(50),
             新建时间 VARCHAR(50),
             完成时间 VARCHAR(50)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+        ) CHARACTER SET utf8 COLLATE utf8_general_ci
         ''')
     else:
         # 创建用户表
