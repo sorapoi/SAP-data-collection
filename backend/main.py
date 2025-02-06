@@ -138,7 +138,7 @@ def init_db():
             department VARCHAR(50),
             email VARCHAR(100),
             need_change_password BOOLEAN DEFAULT TRUE
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
         ''')
         
         c.execute('''
@@ -192,7 +192,7 @@ def init_db():
             生产计划 VARCHAR(50),
             新建时间 VARCHAR(50),
             完成时间 VARCHAR(50)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
         ''')
     else:
         # 创建用户表
