@@ -32,17 +32,53 @@
     <!-- 主要内容 -->
     <div v-else class="main-content">
       <div class="user-info">
-        <span>用户: {{ username }}</span>
-        <span>部门: {{ department }}</span>
+        <div class="user-tag">
+          <span class="username">{{ username }}</span>
+          <span class="separator">:</span>
+          <span class="department">{{ department }}</span>
+        </div>
         <button @click="openSettings">设置</button>
         <button v-if="department === '信息部'" @click="openUserManagement">用户管理</button>
         <button @click="handleLogout">退出</button>
+        <div class="right-buttons">
+          <label v-if="canImport" class="file-input-label">
+            <input type="file" @change="handleFileUpload" accept=".xlsx,.xls">
+            <span>选择文件</span>
+          </label>
+          <button v-if="canExport" @click="exportToExcel">导出Excel</button>
+        </div>
       </div>
 
       <div class="table-container">
-        <div class="actions">
-          <input v-if="canImport" type="file" @change="handleFileUpload" accept=".xlsx,.xls">
-          <button v-if="canExport" @click="exportToExcel">导出Excel</button>
+        <!-- 添加搜索区域 -->
+        <div class="search-area">
+          <div class="search-item">
+            <label>物料编号</label>
+            <input 
+              type="text" 
+              v-model="searchForm.物料"
+              placeholder="搜索物料编号"
+              @input="handleSearch"
+            >
+          </div>
+          <div class="search-item">
+            <label>物料描述</label>
+            <input 
+              type="text" 
+              v-model="searchForm.物料描述"
+              placeholder="搜索物料描述"
+              @input="handleSearch"
+            >
+          </div>
+          <div class="search-item">
+            <label>物料组</label>
+            <input 
+              type="text" 
+              v-model="searchForm.物料组"
+              placeholder="搜索物料组"
+              @input="handleSearch"
+            >
+          </div>
         </div>
         
         <div v-if="tableData.length" class="table-wrapper">
@@ -1025,11 +1061,52 @@ const user = ref<{
   need_change_password: boolean;
 } | null>(null)
 
-// 加载表格数据的函数
+// 添加搜索表单状态
+const searchForm = ref({
+  物料: '',
+  物料描述: '',
+  物料组: ''
+})
+
+// 添加防抖函数
+const debounce = (fn: Function, delay: number) => {
+  let timer: NodeJS.Timeout | null = null
+  return (...args: any[]) => {
+    if (timer) clearTimeout(timer)
+    timer = setTimeout(() => {
+      fn.apply(null, args)
+    }, delay)
+  }
+}
+
+// 处理搜索
+const handleSearch = debounce(async () => {
+  currentPage.value = 1  // 重置页码
+  await loadTableData()
+}, 300)
+
+// 修改加载表格数据的函数
 const loadTableData = async () => {
   try {
+    // 构建查询参数
+    const params = new URLSearchParams({
+      page: currentPage.value.toString(),
+      page_size: pageSize.value.toString()
+    })
+
+    // 添加搜索参数
+    if (searchForm.value.物料) {
+      params.append('物料', searchForm.value.物料)
+    }
+    if (searchForm.value.物料描述) {
+      params.append('物料描述', searchForm.value.物料描述)
+    }
+    if (searchForm.value.物料组) {
+      params.append('物料组', searchForm.value.物料组)
+    }
+
     const response = await axios.get(
-      `${API_BASE_URL}/materials?page=${currentPage.value}&page_size=${pageSize.value}`,
+      `${API_BASE_URL}/materials?${params.toString()}`,
       {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       }
@@ -1127,12 +1204,38 @@ const addUser = async () => {
   display: flex;
   gap: 20px;
   align-items: center;
+  background-color: rgba(255, 255, 255, 0.9);
+  padding: 10px 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.user-info button {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background-color: #4CAF50;
+  color: white;
+}
+
+.user-info button:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.user-info button:active {
+  transform: translateY(1px);
+}
+
+/* 添加导出按钮特殊样式 */
+.user-info button:last-child {
+  background-color: #2196F3;
 }
 
 .actions {
-  margin-bottom: 20px;
-  display: flex;
-  gap: 10px;
+  display: none;
 }
 
 button {
@@ -1392,23 +1495,87 @@ th, td {
   align-items: center;
 }
 
+.user-tag {
+  display: flex;
+  align-items: center;
+  background: linear-gradient(to right, #e3f2fd, #bbdefb);
+  padding: 6px 12px;
+  border-radius: 20px;
+  box-shadow: 0 2px 4px rgba(33, 150, 243, 0.1);
+  border: 1px solid #90caf9;
+}
+
 .username {
-  font-weight: bold;
+  font-weight: 600;
+  color: #1976d2;
+}
+
+.separator {
+  margin: 0 6px;
+  color: #1976d2;
+  font-weight: 600;
 }
 
 .department {
+  color: #2196f3;
+}
+
+.right-buttons {
+  margin-left: auto;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.file-input-label {
+  display: inline-block;
+  padding: 6px 12px;
+  background-color: #2196F3;
+  color: white;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.file-input-label:hover {
+  opacity: 0.9;
+}
+
+.file-input-label input[type="file"] {
+  display: none;
+}
+
+/* 添加搜索区域样式 */
+.search-area {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 20px;
+  background-color: #f5f5f5;
+  padding: 15px;
+  border-radius: 4px;
+}
+
+.search-item {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.search-item label {
+  font-size: 12px;
   color: #666;
 }
 
-.add-button {
-  background-color: #4CAF50;
-  width: 100%;
-  margin-top: 10px;
+.search-item input {
+  padding: 6px 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  width: 200px;
 }
 
-.reset-button {
-  background-color: #ff9800;
-  padding: 4px 8px;
-  font-size: 12px;
+.search-item input:focus {
+  outline: none;
+  border-color: #4CAF50;
+  box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
 }
 </style>

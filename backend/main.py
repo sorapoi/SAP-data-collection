@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from datetime import datetime
@@ -10,6 +10,7 @@ import os
 import mysql.connector
 from mysql.connector import Error
 import logging
+import socket
 
 logging.basicConfig(
     level=logging.INFO,
@@ -205,14 +206,22 @@ def init_db():
         ) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci
         ''')
         
-        # 检查是否已存在默认用户
-        c.execute('SELECT username FROM users WHERE username=%s', ('admin',))
-        if not c.fetchone():
-            # 添加默认管理员用户
-            c.execute('''
-                INSERT INTO users (username, password, department, need_change_password)
-                VALUES (%s, %s, %s, %s)
-            ''', ('admin', 'admin', '信息部', True))
+        # 创建操作日志表
+        c.execute('''
+        CREATE TABLE IF NOT EXISTS operation_logs (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            username VARCHAR(50),
+            department VARCHAR(50),
+            ip_address VARCHAR(50),
+            hostname VARCHAR(100),
+            operation_time DATETIME,
+            material_id VARCHAR(50),
+            field_name VARCHAR(50),
+            old_value TEXT,
+            new_value TEXT,
+            operation_type VARCHAR(20)
+        ) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci
+        ''')
         
         conn.commit()
         logger.info("Database initialized successfully")
@@ -342,14 +351,42 @@ async def save_materials(materials: List[Material], user = Depends(authenticate_
 async def get_materials(
     user = Depends(authenticate_user),
     page: int = 1,
-    page_size: int = 15
+    page_size: int = 15,
+    物料: str = None,
+    物料描述: str = None,
+    物料组: str = None
 ):
     conn = get_db_connection()
     c = conn.cursor()
     
     try:
+        # 构建 WHERE 子句和参数
+        where_conditions = []
+        where_params = []
+        
+        # 添加搜索条件
+        if 物料:
+            where_conditions.append("物料 LIKE %s")
+            where_params.append(f"%{物料}%")
+        
+        if 物料描述:
+            where_conditions.append("物料描述 LIKE %s")
+            where_params.append(f"%{物料描述}%")
+            
+        if 物料组:
+            where_conditions.append("物料组 LIKE %s")
+            where_params.append(f"%{物料组}%")
+        
+        # 采购部不显示物料编号首位为4和5的记录
+        if user["department"] == "采购部":
+            where_conditions.append("物料 NOT LIKE '4%' AND 物料 NOT LIKE '5%'")
+        
+        # 构建 WHERE 子句
+        where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
+        
         # 获取总记录数
-        c.execute('SELECT COUNT(*) FROM materials')
+        count_query = f'SELECT COUNT(*) FROM materials WHERE {where_clause}'
+        c.execute(count_query, where_params)
         total = c.fetchone()[0]
         
         # 计算偏移量
@@ -357,10 +394,8 @@ async def get_materials(
         
         # 根据部门筛选可见字段
         if user["department"] == "信息部":
-            # 信息部可以看到所有字段
             fields = "*"
         elif user["department"] == "财务部":
-            # 财务部能看到基础字段、财务相关字段、以及时间字段
             fields = '''
                 id, 物料, 物料描述, 物料组, 市场, 备注1, 备注2, 生产厂商,
                 评估分类, 销售订单库存, 价格确定, 价格控制, 标准价格, 价格单位,
@@ -368,7 +403,6 @@ async def get_materials(
                 新建时间, 完成时间
             '''
         else:
-            # 其他部门看不到财务相关字段
             fields = '''
                 id, 物料, 物料描述, 物料组, 市场, 备注1, 备注2, 生产厂商,
                 检测时间QC, 最小批量大小PUR, 舍入值PUR, 计划交货时间PUR,
@@ -379,9 +413,18 @@ async def get_materials(
                 独立集中, 计划时间界, 生产评估, 生产计划, 新建时间, 完成时间
             '''
         
-        # 构建完整的 SQL 查询
-        query = f'SELECT {fields} FROM materials LIMIT %s OFFSET %s'
-        c.execute(query, (int(page_size), int(offset)))
+        # 构建完整的 SQL 查询，包含 WHERE 子句和排序
+        query = f'''
+            SELECT {fields} 
+            FROM materials 
+            WHERE {where_clause}
+            ORDER BY 新建时间 DESC 
+            LIMIT %s OFFSET %s
+        '''
+        
+        # 合并所有参数
+        all_params = where_params + [int(page_size), int(offset)]
+        c.execute(query, all_params)
         
         columns = [description[0] for description in c.description]
         result = [dict(zip(columns, row)) for row in c.fetchall()]
@@ -404,6 +447,7 @@ async def get_materials(
 # 修改更新物料数据的接口
 @app.put("/materials/{material_id}")
 async def update_material(
+    request: Request,  # 添加 request 参数用于获取客户端信息
     material_id: str,
     update_data: UpdateMaterial,
     user = Depends(authenticate_user)
@@ -424,6 +468,11 @@ async def update_material(
         conn = get_db_connection()
         c = conn.cursor()
         
+        # 获取旧值
+        c.execute(f'SELECT {update_data.field} FROM materials WHERE 物料 = %s', (material_id,))
+        result = c.fetchone()
+        old_value = result[0] if result else None
+        
         # 更新字段
         c.execute(f'UPDATE materials SET {update_data.field} = %s WHERE 物料 = %s', 
                  (update_data.value, material_id))
@@ -432,6 +481,18 @@ async def update_material(
             raise HTTPException(status_code=404, detail="物料不存在")
         
         conn.commit()
+        
+        # 记录操作日志，各个值的来源如下：
+        await log_operation(
+            request=request,  # 用于获取客户端IP和主机名
+            user=user,        # 从 JWT token 中获取用户名和部门
+            material_id=material_id,  # 从URL参数获取
+            field_name=update_data.field,  # 从请求体获取修改的字段名
+            old_value=str(old_value),  # 从数据库查询获取的原值
+            new_value=update_data.value,  # 从请求体获取的新值
+            operation_type="UPDATE"  # 固定值表示更新操作
+        )
+        
         return {"message": "更新成功"}
         
     except Exception as e:
@@ -539,7 +600,12 @@ async def update_calculated_fields(
 def calculate_fields(material: Material):
     # 获取物料号第一个数字
     first_char = material.物料[0] if material.物料 else ''
-    material_group = material.物料组[:2] if material.物料组 else ''
+    
+    # 如果物料编号首位为4或5，设置相关字段为NA
+    if first_char in ['4', '5']:
+        material.最小批量大小PUR = "NA"
+        material.舍入值PUR = "NA"
+        material.计划交货时间PUR = "NA"
     
     # 设置默认值
     material.价格确定 = "3"
@@ -560,8 +626,8 @@ def calculate_fields(material: Material):
     else:
         material.物料状态 = "NA"
     
-    # 成本核算批量逻辑
-    if first_char in ['1', '2', '5']:
+    # 修改成本核算批量逻辑
+    if first_char in ['2', '5']:  # 移除了 '1'
         material.成本核算批量 = "10000"
     else:
         material.成本核算批量 = "NA"
@@ -573,9 +639,9 @@ def calculate_fields(material: Material):
     material.销售订单库存 = "NA"
     
     if first_char == '1':
-        if material_group == '11':
+        if material.物料组[:2] == '11':
             material.评估分类 = "3010" if has_processing else "3000"
-        elif material_group == '12':
+        elif material.物料组[:2] == '12':
             material.评估分类 = "3100"
     elif first_char == '2':
         material.评估分类 = "3200"
@@ -826,3 +892,55 @@ async def api_export_materials(api_auth: APIAuth):
     except Exception as e:
         print(f"Error in API export: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# 记录操作日志的函数
+async def log_operation(
+    request: Request,
+    user: dict,
+    material_id: str,
+    field_name: str,
+    old_value: str,
+    new_value: str,
+    operation_type: str
+):
+    conn = get_db_connection()
+    c = conn.cursor()
+    
+    try:
+        # 获取客户端IP
+        client_ip = request.client.host
+        
+        # 尝试获取客户端主机名
+        try:
+            hostname = socket.gethostbyaddr(client_ip)[0]
+        except:
+            hostname = 'unknown'
+        
+        # 记录操作日志
+        c.execute('''
+            INSERT INTO operation_logs (
+                username, department, ip_address, hostname,
+                operation_time, material_id, field_name,
+                old_value, new_value, operation_type
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ''', (
+            user["username"],
+            user["department"],
+            client_ip,
+            hostname,
+            datetime.now(),
+            material_id,
+            field_name,
+            old_value,
+            new_value,
+            operation_type
+        ))
+        
+        conn.commit()
+        
+    except Exception as e:
+        logger.error(f"Error logging operation: {str(e)}")
+        conn.rollback()
+        
+    finally:
+        conn.close()
