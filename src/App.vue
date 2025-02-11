@@ -37,7 +37,8 @@
           <span class="separator">:</span>
           <span class="department">{{ department }}</span>
         </div>
-        <button @click="openSettings">设置</button>
+        <button @click="openSettings" class="settings-button">设置</button>
+        <button @click="openChangePasswordModal">修改密码</button>
         <button v-if="department === '信息部'" @click="openUserManagement">用户管理</button>
         <button @click="handleLogout">退出</button>
         <div class="right-buttons">
@@ -96,7 +97,8 @@
                   <template v-if="isEditable(header)">
                     <select v-if="header === 'MRP控制者'"
                       v-model="row[header]"
-                      @change="handleCellChange(index, header, $event)">
+                      @change="handleCellChange(index, header, $event)"
+                      @blur="handleCellBlur(index, header, $event)">
                       <option value="">请选择</option>
                       <option v-for="option in mrpControllers" :key="option.value" :value="option.value">
                         {{ option.label }}
@@ -106,6 +108,7 @@
                       type="text" 
                       v-model="row[header]" 
                       @change="handleCellChange(index, header, $event)"
+                      @blur="handleCellBlur(index, header, $event)"
                       @input="validateInput(index, header, $event)"
                       :placeholder="getPlaceholder(header)"
                     >
@@ -152,23 +155,30 @@
 
     <!-- 设置对话框 -->
     <div v-if="showSettings" class="modal">
-      <div class="modal-content">
-        <h2>个人设置</h2>
+      <div class="modal-content settings-modal">
+        <h2>设置</h2>
         <div class="form-group">
-          <label>新密码{{ user?.need_change_password ? ' (必填)' : '' }}</label>
-          <input type="password" v-model="settingsForm.newPassword" placeholder="输入新密码">
+          <label class="checkbox-label">
+            <input 
+              type="checkbox" 
+              v-model="showCompleted"
+              @change="handleSettingsChange"
+            >
+            查看已完成物料
+          </label>
         </div>
         <div class="form-group">
-          <label>确认密码</label>
-          <input type="password" v-model="settingsForm.confirmPassword" placeholder="确认新密码">
-        </div>
-        <div class="form-group">
-          <label>邮箱</label>
-          <input type="email" v-model="settingsForm.email" placeholder="输入邮箱">
+          <label>显示行数</label>
+          <input 
+            type="number" 
+            v-model="pageSize" 
+            min="1" 
+            max="100"
+            @change="handleSettingsChange"
+          >
         </div>
         <div class="modal-buttons">
-          <button @click="saveSettings">保存</button>
-          <button @click="closeSettings">取消</button>
+          <button @click="closeSettings">关闭</button>
         </div>
       </div>
     </div>
@@ -219,6 +229,25 @@
         
         <div class="modal-buttons">
           <button @click="showUserManagement = false">关闭</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 添加修改密码对话框 -->
+    <div v-if="showChangePassword" class="modal">
+      <div class="modal-content">
+        <h2>修改密码</h2>
+        <div class="form-group">
+          <label>新密码</label>
+          <input type="password" v-model="changePasswordForm.newPassword" placeholder="输入新密码">
+        </div>
+        <div class="form-group">
+          <label>确认密码</label>
+          <input type="password" v-model="changePasswordForm.confirmPassword" placeholder="确认新密码">
+        </div>
+        <div class="modal-buttons">
+          <button @click="handleChangePassword">确认</button>
+          <button @click="closeChangePasswordModal">取消</button>
         </div>
       </div>
     </div>
@@ -282,7 +311,7 @@ interface MaterialRow {
 
 // 分页相关的状态
 const currentPage = ref(1)
-const pageSize = ref(15)
+const pageSize = ref(15)  // 恢复这个定义
 const totalPages = ref(0)
 const totalItems = ref(0)
 const tableData = ref<MaterialRow[]>([])
@@ -392,8 +421,12 @@ const handleLogin = async () => {
       username.value = loginForm.value.username
       department.value = response.data.department
       isLoggedIn.value = true
-      // 登录成功后立即加载数据
-      await loadTableData()
+      
+      // 加载用户设置
+      showCompleted.value = response.data.settings.show_completed
+      pageSize.value = response.data.settings.page_size
+      
+      await loadMaterials()
     }
   } catch (error) {
     alert('登录失败')
@@ -409,23 +442,45 @@ const handleChangePassword = async () => {
   }
 
   try {
-    await axios.put(`${API_BASE_URL}/user/settings`, {
+    await axios.put(`${API_BASE_URL}/user/password`, {
       newPassword: changePasswordForm.value.newPassword
     }, {
-      headers: { Authorization: `Bearer ${tempToken.value}` }
+      headers: { 
+        Authorization: `Bearer ${localStorage.getItem('token')}`,
+        'Content-Type': 'application/json'
+      }
     })
     
-    // 密码修改成功后，使用新密码自动重新登录
+    // 使用新密码自动重新登录
     loginForm.value.password = changePasswordForm.value.newPassword
     showChangePassword.value = false
-    changePasswordForm.value.newPassword = ''
-    changePasswordForm.value.confirmPassword = ''
-    // 直接设置登录状态并加载数据，避免重复调用登录接口
-    localStorage.setItem('token', tempToken.value)
-    isLoggedIn.value = true
-    department.value = user.value?.department || ''
-    await loadTableData()
-  } catch (error) {
+    
+    try {
+      const response = await axios.post(`${API_BASE_URL}/login`, {
+        username: username.value,
+        password: changePasswordForm.value.newPassword
+      })
+      
+      // 更新 token 和登录状态
+      localStorage.setItem('token', response.data.token)
+      department.value = response.data.department
+      
+      // 清空修改密码表单
+      changePasswordForm.value.newPassword = ''
+      changePasswordForm.value.confirmPassword = ''
+      
+      alert('密码修改成功')
+      
+      // 重新加载数据
+      await loadMaterials()
+      
+    } catch (error) {
+      alert('自动重新登录失败，请手动登录')
+      handleLogout()
+    }
+    
+  } catch (error: any) {
+    console.error('修改密码失败:', error)
     alert('修改密码失败')
   }
 }
@@ -578,15 +633,21 @@ const handleFileUpload = async (event: Event) => {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       })
       await loadMaterials() // 重新加载数据以显示最新结果
-      alert(response.data.message) // 显示成功导入的数量
-    } catch (error: any) {
-      if (error.response?.data?.detail?.duplicates) {
-        const duplicates = error.response.data.detail.duplicates
-        alert(`以下物料编号已存在：\n${duplicates.join('\n')}`)
-      } else {
-        console.error('保存数据失败:', error)
-        alert('保存数据失败')
+      
+      // 显示导入结果，包括成功和跳过的信息
+      const successMessage = response.data.message
+      const skippedMaterials = response.data.skipped
+      
+      let message = successMessage
+      if (skippedMaterials.length > 0) {
+        message += `\n\n以下物料已存在，已跳过：\n${skippedMaterials.join('\n')}`
       }
+      
+      alert(message)
+      
+    } catch (error: any) {
+      console.error('保存数据失败:', error)
+      alert('保存数据失败')
     }
   }
   reader.readAsBinaryString(file)
@@ -599,7 +660,8 @@ const loadMaterials = async () => {
       headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
       params: {
         page: currentPage.value,
-        page_size: pageSize.value
+        page_size: pageSize.value,
+        show_completed: showCompleted.value
       }
     })
     
@@ -646,13 +708,42 @@ const exportToExcel = async () => {
   }
 }
 
-// 单元格数据变更处理
+// 添加处理失去焦点的函数
+const handleCellBlur = async (rowIndex: number, header: string, event: Event) => {
+  if (!isEditable(header)) return
+  
+  let value = header === 'MRP控制者' 
+    ? (event.target as HTMLSelectElement).value 
+    : (event.target as HTMLInputElement).value
+  
+  // 如果值为空，设置默认值（除了 MRP控制者）
+  if (!value.trim() && header !== 'MRP控制者') {
+    value = header === '标准价格' ? '0' : 'NA'
+    
+    // 更新输入框的值
+    if (header === 'MRP控制者') {
+      (event.target as HTMLSelectElement).value = value
+    } else {
+      (event.target as HTMLInputElement).value = value
+    }
+    
+    // 直接更新本地数据，避免重复请求
+    tableData.value[rowIndex][header] = value
+  }
+}
+
+// 修改原有的 handleCellChange 函数
 const handleCellChange = async (rowIndex: number, header: string, event: Event) => {
   if (!isEditable(header)) return
   
-  const value = header === 'MRP控制者' 
+  let value = header === 'MRP控制者' 
     ? (event.target as HTMLSelectElement).value 
     : (event.target as HTMLInputElement).value
+  
+  // 处理空值的默认值（除了 MRP控制者）
+  if (!value.trim() && header !== 'MRP控制者') {
+    value = header === '标准价格' ? '0' : 'NA'
+  }
   
   const material = tableData.value[rowIndex]
   
@@ -685,7 +776,10 @@ const handleCellChange = async (rowIndex: number, header: string, event: Event) 
       (event.target as HTMLInputElement).value = material[header]
     }
     
-    alert(error.response?.data?.detail || '保存失败')
+    // 只在非空值时显示错误
+    if (value.trim()) {
+      alert(error.response?.data?.detail || '保存失败')
+    }
   }
 }
 
@@ -743,9 +837,35 @@ const checkLoginStatus = async () => {
 }
 
 // 修改 onMounted
-onMounted(() => {
+onMounted(async () => {
   getBingWallpaper()
   checkLoginStatus() // 添加登录状态检查
+  // 如果已经登录，加载用户设置
+  const token = localStorage.getItem('token')
+  if (token) {
+    isLoggedIn.value = true
+    try {
+      // 解析 token 获取用户信息
+      const tokenData = JSON.parse(atob(token.split('.')[1]))
+      username.value = tokenData.username
+      department.value = tokenData.department
+      
+      // 从后端获取最新的用户设置
+      const response = await axios.get(`${API_BASE_URL}/user/settings`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      
+      // 更新设置状态
+      showCompleted.value = response.data.show_completed
+      pageSize.value = response.data.page_size
+      
+      // 加载物料数据
+      await loadMaterials()
+    } catch (error) {
+      console.error('加载用户设置失败:', error)
+      handleLogout()  // 如果出错，登出用户
+    }
+  }
 })
 
 // 检查是否需要触发计算
@@ -948,11 +1068,7 @@ const updateCalculatedFields = async (row: MaterialRow) => {
 
 // 设置相关的状态
 const showSettings = ref(false)
-const settingsForm = ref({
-  newPassword: '',
-  confirmPassword: '',
-  email: ''
-})
+const showCompleted = ref(false)
 
 // 用户管理相关的状态
 const showUserManagement = ref(false)
@@ -961,8 +1077,6 @@ const users = ref<Array<{username: string, department: string}>>([])
 // 打开设置对话框
 const openSettings = () => {
   showSettings.value = true
-  // 获取当前用户的邮箱信息
-  loadUserSettings()
 }
 
 // 加载用户设置
@@ -971,54 +1085,34 @@ const loadUserSettings = async () => {
     const response = await axios.get(`${API_BASE_URL}/user/settings`, {
       headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
     })
-    settingsForm.value.email = response.data.email
+    showCompleted.value = response.data.show_completed
   } catch (error) {
     console.error('加载用户设置失败:', error)
   }
 }
 
 // 修改保存设置函数
-const saveSettings = async () => {
-  if (!settingsForm.value.newPassword) {
-    if (user.value?.need_change_password) {
-      alert('必须修改密码')
-      return
-    }
-  }
-
-  if (settingsForm.value.newPassword && 
-      settingsForm.value.newPassword !== settingsForm.value.confirmPassword) {
-    alert('两次输入的密码不一致')
-    return
-  }
-
+const handleSettingsChange = async () => {
   try {
-    await axios.put(`${API_BASE_URL}/user/settings`, {
-      newPassword: settingsForm.value.newPassword,
-      email: settingsForm.value.email
+    // 保存设置到服务器
+    await axios.post(`${API_BASE_URL}/user/settings`, {
+      show_completed: showCompleted.value,
+      page_size: pageSize.value
     }, {
       headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
     })
-    alert('设置保存成功')
-    showSettings.value = false
-    settingsForm.value.newPassword = ''
-    settingsForm.value.confirmPassword = ''
     
-    // 如果是强制修改密码，保存后刷新页面重新登录
-    if (user.value?.need_change_password) {
-      handleLogout()
-    }
+    // 重新加载数据
+    currentPage.value = 1
+    await loadMaterials()
   } catch (error) {
+    console.error('保存设置失败:', error)
     alert('保存设置失败')
   }
 }
 
 // 修改设置对话框，添加关闭按钮的处理
 const closeSettings = () => {
-  if (user.value?.need_change_password) {
-    alert('必须先修改密码')
-    return
-  }
   showSettings.value = false
 }
 
@@ -1041,16 +1135,16 @@ const loadUsers = async () => {
 }
 
 // 重置用户密码
-const resetPassword = async (username: string) => {
-  if (!confirm(`确定要重置用户 ${username} 的密码吗？`)) return
+const resetPassword = async (username: string) => {  // 添加 username 参数
   
   try {
     await axios.post(`${API_BASE_URL}/users/${username}/reset-password`, {}, {
       headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
     })
     alert('密码重置成功')
-  } catch (error) {
-    alert('密码重置失败')
+  } catch (error: any) {
+    console.error('重置密码失败:', error)
+    alert('重置密码失败')
   }
 }
 
@@ -1160,6 +1254,20 @@ const addUser = async () => {
       alert('添加用户失败')
     }
   }
+}
+
+// 打开修改密码对话框
+const openChangePasswordModal = () => {
+  showChangePassword.value = true
+  changePasswordForm.value = {
+    newPassword: '',
+    confirmPassword: ''
+  }
+}
+
+// 关闭修改密码对话框
+const closeChangePasswordModal = () => {
+  showChangePassword.value = false
 }
 </script>
 
@@ -1577,5 +1685,40 @@ th, td {
   outline: none;
   border-color: #4CAF50;
   box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
+}
+
+.settings-button {
+  padding: 6px 12px;
+  background-color: #607d8b;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.settings-button:hover {
+  opacity: 0.9;
+}
+
+.settings-modal {
+  max-width: 400px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+}
+
+.form-group input[type="number"] {
+  width: 80px;
+  padding: 4px 8px;
 }
 </style>

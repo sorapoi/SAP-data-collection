@@ -140,14 +140,16 @@ def init_db():
     c = conn.cursor()
     
     try:
-        # 创建用户表
+        # 创建用户表，添加设置相关字段
         c.execute('''
         CREATE TABLE IF NOT EXISTS users (
             username VARCHAR(50) PRIMARY KEY,
             password VARCHAR(100),
             department VARCHAR(50),
             email VARCHAR(100),
-            need_change_password BOOLEAN DEFAULT TRUE
+            need_change_password BOOLEAN DEFAULT TRUE,
+            show_completed BOOLEAN DEFAULT FALSE,
+            page_size INT DEFAULT 15
         ) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci
         ''')
         
@@ -246,37 +248,45 @@ def authenticate_user(credentials: HTTPAuthorizationCredentials = Depends(securi
 
 # 登录接口
 @app.post("/login")
-async def login(user: User):
+async def login(user_data: User):
     conn = get_db_connection()
     c = conn.cursor()
     
-
-    # MariaDB 使用 %s 作为参数占位符
-    c.execute('''
-        SELECT department, need_change_password 
-        FROM users 
-        WHERE username=%s AND password=%s
-    ''', (user.username, user.password))
-    
-    result = c.fetchone()
-    conn.close()
-    
-    if result:
-        token = jwt.encode(
-            {
-                "username": user.username, 
-                "department": result[0],
-                "need_change_password": bool(result[1])
-            },
-            SECRET_KEY,
-            algorithm="HS256"
+    try:
+        c.execute(
+            'SELECT username, department, need_change_password, show_completed, page_size FROM users WHERE username = %s AND password = %s',
+            (user_data.username, user_data.password)
         )
-        return {
-            "token": token, 
-            "department": result[0],
-            "need_change_password": bool(result[1])
-        }
-    raise HTTPException(status_code=401, detail="Invalid credentials")
+        result = c.fetchone()
+        
+        if result:
+            username, department, need_change_password, show_completed, page_size = result
+            token = jwt.encode(
+                {
+                    "username": username, 
+                    "department": department,
+                    "need_change_password": need_change_password,
+                    "show_completed": show_completed,
+                    "page_size": page_size
+                },
+                SECRET_KEY,
+                algorithm="HS256"
+            )
+            
+            return {
+                "token": token,
+                "department": department,
+                "need_change_password": need_change_password,
+                "settings": {
+                    "show_completed": show_completed,
+                    "page_size": page_size
+                }
+            }
+            
+        raise HTTPException(status_code=401, detail="用户名或密码错误")
+        
+    finally:
+        conn.close()
 
 # 保存物料数据
 @app.post("/materials")
@@ -286,6 +296,9 @@ async def save_materials(materials: List[Material], user = Depends(authenticate_
     
     conn = get_db_connection()
     c = conn.cursor()
+    
+    skipped_materials = []  # 记录被跳过的物料号
+    success_count = 0  # 记录成功导入的数量
     
     try:
         # MariaDB 版本
@@ -299,44 +312,37 @@ async def save_materials(materials: List[Material], user = Depends(authenticate_
             existing = c.fetchone()
             
             if existing:
-                # 更新现有记录
-                update_fields = []
-                update_values = []
-                
-                for field, value in material.dict().items():
-                    if field != '物料' and value is not None:  # 跳过主键和空值
-                        update_fields.append(f"{field}=%s")
-                        update_values.append(value)
-                
-                if update_fields:
-                    update_values.append(material.物料)  # 添加 WHERE 条件的值
-                    query = f'''
-                        UPDATE materials 
-                        SET {', '.join(update_fields)}
-                        WHERE 物料=%s
-                    '''
-                    c.execute(query, update_values)
-            else:
-                # 插入新记录
-                fields = []
-                values = []
-                placeholders = []
-                
-                for field, value in material.dict().items():
-                    if value is not None:  # 跳过空值
-                        fields.append(field)
-                        values.append(value)
-                        placeholders.append('%s')
-                
-                query = f'''
-                    INSERT INTO materials 
-                    ({', '.join(fields)})
-                    VALUES ({', '.join(placeholders)})
-                '''
-                c.execute(query, values)
+                # 记录被跳过的物料号
+                skipped_materials.append(material.物料)
+                continue  # 跳过已存在的物料
+            
+            # 插入新记录
+            fields = []
+            values = []
+            placeholders = []
+            
+            for field, value in material.dict().items():
+                if value is not None:  # 跳过空值
+                    fields.append(field)
+                    values.append(value)
+                    placeholders.append('%s')
+            
+            query = f'''
+                INSERT INTO materials 
+                ({', '.join(fields)})
+                VALUES ({', '.join(placeholders)})
+            '''
+            c.execute(query, values)
+            success_count += 1
         
         conn.commit()
-        return {"message": "数据保存成功"}
+        
+        # 返回导入结果
+        return {
+            "message": f"成功导入 {success_count} 条数据",
+            "skipped": skipped_materials,  # 返回被跳过的物料号列表
+            "success_count": success_count
+        }
         
     except Exception as e:
         print(f"Error saving materials: {str(e)}")
@@ -352,6 +358,7 @@ async def get_materials(
     user = Depends(authenticate_user),
     page: int = 1,
     page_size: int = 15,
+    show_completed: bool = False,
     物料: str = None,
     物料描述: str = None,
     物料组: str = None
@@ -360,7 +367,6 @@ async def get_materials(
     c = conn.cursor()
     
     try:
-        # 构建 WHERE 子句和参数
         where_conditions = []
         where_params = []
         
@@ -381,7 +387,11 @@ async def get_materials(
         if user["department"] == "采购部":
             where_conditions.append("物料 NOT LIKE '4%' AND 物料 NOT LIKE '5%'")
         
-        # 构建 WHERE 子句
+        # 只有在勾选时才显示已完成物料
+        if not show_completed:
+            where_conditions.append("(完成时间 IS NULL OR 完成时间 = '')")
+        
+        # 构建完整的 WHERE 子句
         where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
         
         # 获取总记录数
@@ -662,42 +672,65 @@ def calculate_fields(material: Material):
 async def get_user_settings(user = Depends(authenticate_user)):
     conn = get_db_connection()
     c = conn.cursor()
-    c.execute('SELECT email FROM users WHERE username = %s', (user["username"],))
-    result = c.fetchone()
-    conn.close()
-    return {"email": result[0] if result else None}
-
+    
+    try:
+        c.execute('''
+            SELECT show_completed, page_size 
+            FROM users 
+            WHERE username = %s
+        ''', (user["username"],))
+        
+        result = c.fetchone()
+        if result:
+            show_completed, page_size = result
+            return {
+                "show_completed": bool(show_completed),  # 确保返回布尔值
+                "page_size": int(page_size)  # 确保返回整数
+            }
+        
+        return {
+            "show_completed": False,
+            "page_size": 15
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting user settings: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+        
+    finally:
+        conn.close()
 
 # 更新用户设置
-@app.put("/user/settings")
-async def update_user_settings(settings: UserSettings, user = Depends(authenticate_user)):
+@app.post("/user/settings")
+async def save_settings(
+    settings: dict,
+    user = Depends(authenticate_user)
+):
     conn = get_db_connection()
     c = conn.cursor()
     
-    updates = []
-    values = []
-    
-    if settings.newPassword:
-        updates.append("password = %s")
-        values.append(settings.newPassword)
-        updates.append("need_change_password = %s")
-        values.append(False)
-
-    
-    if settings.email is not None:
-        updates.append("email = %s")
-        values.append(settings.email)
-    
-
-    if updates:
-        query = f"UPDATE users SET {', '.join(updates)} WHERE username = %s"
-        values.append(user["username"])
-        c.execute(query, values)
+    try:
+        c.execute('''
+            UPDATE users 
+            SET show_completed = %s,
+                page_size = %s
+            WHERE username = %s
+        ''', (
+            settings["show_completed"],
+            settings["page_size"],
+            user["username"]
+        ))
+        
         conn.commit()
-
-    
-    conn.close()
-    return {"message": "设置更新成功"}
+        return {"message": "设置保存成功"}
+        
+    except Exception as e:
+        logger.error(f"Error saving settings: {str(e)}")
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+        
+    finally:
+        conn.close()
 
 # 获取用户列表（仅信息部可用）
 @app.get("/users")
@@ -941,6 +974,34 @@ async def log_operation(
     except Exception as e:
         logger.error(f"Error logging operation: {str(e)}")
         conn.rollback()
+        
+    finally:
+        conn.close()
+
+@app.put("/user/password")
+async def update_password(
+    password_data: dict,
+    user = Depends(authenticate_user)
+):
+    conn = get_db_connection()
+    c = conn.cursor()
+    
+    try:
+        # 更新用户密码
+        c.execute('''
+            UPDATE users 
+            SET password = %s,
+                need_change_password = FALSE
+            WHERE username = %s
+        ''', (password_data["newPassword"], user["username"]))
+        
+        conn.commit()
+        return {"message": "密码修改成功"}
+        
+    except Exception as e:
+        logger.error(f"Error updating password: {str(e)}")
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
         
     finally:
         conn.close()
