@@ -363,7 +363,7 @@ const canExport = computed(() => department.value === '信息部')
 const getEditableColumns = computed(() => {
   switch (department.value) {
     case '运营管理部':
-      return ['MRP控制者', '最小批量大小PUR', '舍入值PUR', '计划交货时间PUR']  // 添加采购部的字段
+      return ['MRP控制者', '最小批量大小PUR', '舍入值PUR', '计划交货时间PUR', '检测时间QC']  // 添加采购部的字段
     case '采购部':
       return ['最小批量大小PUR', '舍入值PUR', '计划交货时间PUR']
     case 'QC检测室':
