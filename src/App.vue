@@ -917,7 +917,7 @@ const calculateFields = (row: MaterialRow) => {
   row.再订货点 = row.物料 ? 'NA' : ''
 
   // 安全库存计算
-  row.安全库存 = ['4', '5'].includes(firstChar) ? 'NA' : ''
+  row.安全库存 = ['4', '5'].includes(firstChar) ? 'NA' : '0'
 
   // 采购类型计算
   if (row.物料) {
