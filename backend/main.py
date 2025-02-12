@@ -45,12 +45,13 @@ class User(BaseModel):
 
 class Material(BaseModel):
     物料: str
-    物料描述: str
-    物料组: Optional[str] = None
-    市场: Optional[str] = None
-    备注1: Optional[str] = None
-    备注2: Optional[str] = None
-    生产厂商: Optional[str] = None
+    物料描述: str | None = None
+    物料组: str | None = None
+    市场: str | None = None
+    基本计量单位: str | None = None  # 添加基本计量单位字段
+    备注1: str | None = None
+    备注2: str | None = None
+    生产厂商: str | None = None
     评估分类: Optional[str] = None
     销售订单库存: Optional[str] = None
     价格确定: Optional[str] = None
@@ -309,13 +310,13 @@ async def save_materials(materials: List[Material], user = Depends(authenticate_
             calculate_fields(material)  # 计算自动填充字段
             
             # 检查物料是否已存在
-            # c.execute('SELECT 物料 FROM materials WHERE 物料=%s', (material.物料,))
-            # existing = c.fetchone()
+            c.execute('SELECT 物料 FROM materials WHERE 物料=%s', (material.物料,))
+            existing = c.fetchone()
             
-            # if existing:
-            #     # 记录被跳过的物料号
-            #     skipped_materials.append(material.物料)
-            #     continue  # 跳过已存在的物料
+            if existing:
+                # 记录被跳过的物料号
+                skipped_materials.append(material.物料)
+                continue  # 跳过已存在的物料
             
             # 插入新记录
             fields = []

@@ -578,6 +578,7 @@ const handleFileUpload = async (event: Event) => {
         物料描述: row.物料描述?.trim() || '',
         物料组: row.物料组?.trim() || null,
         市场: row.市场?.trim() || null,
+        基本计量单位: row.基本计量单位?.trim() || null,  // 直接使用 Excel 中的值
         备注1: row.备注1?.trim() || null,
         备注2: row.备注2?.trim() || null,
         生产厂商: row.生产厂商?.trim() || null,
@@ -622,7 +623,6 @@ const handleFileUpload = async (event: Event) => {
         差异码: row.差异码?.trim() || null,
         物料状态: row.物料状态?.trim() || null,
         成本核算批量: row.成本核算批量?.trim() || null,
-        基本计量单位: row.基本计量单位?.trim() || null
       }))
 
     if (processedData.length === 0) {
