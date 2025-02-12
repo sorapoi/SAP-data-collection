@@ -114,6 +114,11 @@ class NewUser(BaseModel):
 class APIAuth(BaseModel):
     api_key: str
 
+# 添加完成请求模型
+class CompleteRequest(BaseModel):
+    api_key: str
+    material_ids: List[str]
+
 # 数据库连接函数
 def get_db_connection():
     try:
@@ -921,12 +926,9 @@ async def api_export_materials(api_auth: APIAuth):
 
 # 添加更新完成时间的接口
 @app.post("/api/materials/complete")
-async def api_complete_materials(
-    api_auth: APIAuth,
-    material_ids: List[str]
-):
+async def api_complete_materials(request: CompleteRequest):
     # 验证API密钥
-    verify_api_key(api_auth)
+    verify_api_key(APIAuth(api_key=request.api_key))
     
     try:
         conn = get_db_connection()
@@ -935,19 +937,19 @@ async def api_complete_materials(
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         # 更新完成时间
-        placeholders = ','.join(['%s' for _ in material_ids])
+        placeholders = ','.join(['%s' for _ in request.material_ids])
         c.execute(f'''
             UPDATE materials 
             SET 完成时间 = %s 
             WHERE 物料 IN ({placeholders})
-        ''', [current_time] + material_ids)
+        ''', [current_time] + request.material_ids)
         
         conn.commit()
         conn.close()
         
         return {
             "status": "success",
-            "message": f"已更新 {len(material_ids)} 条记录的完成时间",
+            "message": f"已更新 {len(request.material_ids)} 条记录的完成时间",
             "timestamp": current_time
         }
         
