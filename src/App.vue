@@ -306,6 +306,7 @@ interface MaterialRow {
   '差异码': string;
   '物料状态': string;
   '成本核算批量': string;
+  '基本计量单位': string;
   [key: string]: string;
 }
 
@@ -317,7 +318,7 @@ const totalItems = ref(0)
 const tableData = ref<MaterialRow[]>([])
 const headers = computed(() => {
   const baseHeaders = [
-    '物料', '物料描述', '物料组', '市场', '备注1', '备注2', '生产厂商'
+    '物料', '物料描述', '物料组', '市场', '备注1', '备注2', '生产厂商', '基本计量单位'
   ]
   
   const financeHeaders = [
@@ -620,7 +621,8 @@ const handleFileUpload = async (event: Event) => {
         物料来源: row.物料来源?.trim() || null,
         差异码: row.差异码?.trim() || null,
         物料状态: row.物料状态?.trim() || null,
-        成本核算批量: row.成本核算批量?.trim() || null
+        成本核算批量: row.成本核算批量?.trim() || null,
+        基本计量单位: row.基本计量单位?.trim() || null
       }))
 
     if (processedData.length === 0) {

@@ -153,7 +153,7 @@ def init_db():
         ) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci
         ''')
         
-        # 创建物料表
+        # 创建物料表，添加基本计量单位字段
         c.execute('''
         CREATE TABLE IF NOT EXISTS materials (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -161,6 +161,7 @@ def init_db():
             物料描述 TEXT,
             物料组 VARCHAR(50),
             市场 VARCHAR(50),
+            基本计量单位 VARCHAR(10),  # 添加基本计量单位字段
             备注1 TEXT,
             备注2 TEXT,
             生产厂商 TEXT,
@@ -308,13 +309,13 @@ async def save_materials(materials: List[Material], user = Depends(authenticate_
             calculate_fields(material)  # 计算自动填充字段
             
             # 检查物料是否已存在
-            c.execute('SELECT 物料 FROM materials WHERE 物料=%s', (material.物料,))
-            existing = c.fetchone()
+            # c.execute('SELECT 物料 FROM materials WHERE 物料=%s', (material.物料,))
+            # existing = c.fetchone()
             
-            if existing:
-                # 记录被跳过的物料号
-                skipped_materials.append(material.物料)
-                continue  # 跳过已存在的物料
+            # if existing:
+            #     # 记录被跳过的物料号
+            #     skipped_materials.append(material.物料)
+            #     continue  # 跳过已存在的物料
             
             # 插入新记录
             fields = []
@@ -594,7 +595,6 @@ async def update_calculated_fields(
         
         # 执行更新
         c.execute(query, list(calculated_fields.values()) + [material_id])
-        
         if c.rowcount == 0:
             conn.close()
             raise HTTPException(status_code=404, detail="物料不存在")
@@ -640,7 +640,7 @@ def calculate_fields(material: Material):
     if first_char in ['2', '5']:  # 移除了 '1'
         material.成本核算批量 = "10000"
     else:
-        material.成本核算批量 = "NA"
+        material.成本核算批量 = "1"
     
     # 评估类和销售订单库存逻辑
     has_processing = "进料加工" in (material.物料描述 or "")
@@ -816,7 +816,7 @@ def verify_api_key(api_auth: APIAuth):
         raise HTTPException(status_code=401, detail="Invalid API key")
     return True
 
-# 添加API接口，供其他程序调用
+# 修改 API 导出接口，添加基本计量单位字段
 @app.post("/api/materials/export")
 async def api_export_materials(api_auth: APIAuth):
     # 验证API密钥
@@ -833,6 +833,7 @@ async def api_export_materials(api_auth: APIAuth):
                 物料描述,
                 物料组,
                 市场,
+                基本计量单位,  # 添加基本计量单位字段
                 备注1,
                 备注2,
                 生产厂商,
@@ -894,36 +895,61 @@ async def api_export_materials(api_auth: APIAuth):
         ''')
         
         columns = [description[0] for description in c.description]
-        result = [dict(zip(columns, row)) for row in c.fetchall()]
         
-        # 更新完成时间
-        if result:
-            material_ids = [row['物料'] for row in result]
-            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # 一条一条返回数据
+        while True:
+            row = c.fetchone()
+            if row is None:
+                break
+                
+            material_data = dict(zip(columns, row))
             
-            placeholders = ','.join(['%s' for _ in material_ids])
-            c.execute(f'''
-                UPDATE materials 
-                SET 完成时间 = %s 
-                WHERE 物料 IN ({placeholders})
-            ''', [current_time] + material_ids)
-
-
-            
-            conn.commit()
+            yield {
+                "status": "success",
+                "timestamp": datetime.now().isoformat(),
+                "data": material_data
+            }
         
         conn.close()
         
-        # 返回JSON格式的响应
+    except Exception as e:
+        print(f"Error in API export: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# 添加更新完成时间的接口
+@app.post("/api/materials/complete")
+async def api_complete_materials(
+    api_auth: APIAuth,
+    material_ids: List[str]
+):
+    # 验证API密钥
+    verify_api_key(api_auth)
+    
+    try:
+        conn = get_db_connection()
+        c = conn.cursor()
+        
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        # 更新完成时间
+        placeholders = ','.join(['%s' for _ in material_ids])
+        c.execute(f'''
+            UPDATE materials 
+            SET 完成时间 = %s 
+            WHERE 物料 IN ({placeholders})
+        ''', [current_time] + material_ids)
+        
+        conn.commit()
+        conn.close()
+        
         return {
             "status": "success",
-            "timestamp": datetime.now().isoformat(),
-            "total_count": len(result),
-            "data": result
+            "message": f"已更新 {len(material_ids)} 条记录的完成时间",
+            "timestamp": current_time
         }
         
     except Exception as e:
-        print(f"Error in API export: {str(e)}")
+        print(f"Error updating completion time: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # 记录操作日志的函数
