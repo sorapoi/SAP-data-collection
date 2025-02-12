@@ -817,7 +817,7 @@ def verify_api_key(api_auth: APIAuth):
         raise HTTPException(status_code=401, detail="Invalid API key")
     return True
 
-# 修改 API 导出接口，添加基本计量单位字段
+# 修改 API 导出接口
 @app.post("/api/materials/export")
 async def api_export_materials(api_auth: APIAuth):
     # 验证API密钥
@@ -834,7 +834,7 @@ async def api_export_materials(api_auth: APIAuth):
                 物料描述,
                 物料组,
                 市场,
-                基本计量单位,  # 添加基本计量单位字段
+                基本计量单位,
                 备注1,
                 备注2,
                 生产厂商,
@@ -896,22 +896,24 @@ async def api_export_materials(api_auth: APIAuth):
         ''')
         
         columns = [description[0] for description in c.description]
+        result = []
         
-        # 一条一条返回数据
+        # 改为一次性返回所有数据
         while True:
             row = c.fetchone()
             if row is None:
                 break
                 
             material_data = dict(zip(columns, row))
-            
-            yield {
-                "status": "success",
-                "timestamp": datetime.now().isoformat(),
-                "data": material_data
-            }
+            result.append(material_data)
         
         conn.close()
+        
+        return {
+            "status": "success",
+            "timestamp": datetime.now().isoformat(),
+            "data": result
+        }
         
     except Exception as e:
         print(f"Error in API export: {str(e)}")
