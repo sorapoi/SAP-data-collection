@@ -753,7 +753,7 @@ const handleCellBlur = async (rowIndex: number, header: string, event: Event) =>
     ? (event.target as HTMLSelectElement).value 
     : (event.target as HTMLInputElement).value
   
-  // 如果值为空，设置默认值（除了 MRP控制者）
+  // 如果值为空，设置默认值并触发保存
   if (!value.trim() && header !== 'MRP控制者') {
     value = header === '标准价格' ? '0' : 'NA'
     
@@ -766,6 +766,29 @@ const handleCellBlur = async (rowIndex: number, header: string, event: Event) =>
     
     // 直接更新本地数据，避免重复请求
     tableData.value[rowIndex][header] = value
+    
+    // 触发保存到后端
+    try {
+      await axios.put(
+        `${API_BASE_URL}/materials/${encodeURIComponent(tableData.value[rowIndex].物料)}`,
+        {
+          field: header,
+          value: value
+        },
+        {
+          headers: { 
+            Authorization: `Bearer ${localStorage.getItem('token')}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      )
+      
+      // 检查是否需要触发计算
+      checkAndCalculate(tableData.value[rowIndex])
+      
+    } catch (error) {
+      console.error('保存默认值失败:', error)
+    }
   }
 }
 
