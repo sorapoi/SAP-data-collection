@@ -388,7 +388,7 @@ const API_BASE_URL = import.meta.env.MODE === 'development'
 
 // 权限控制
 const canImport = computed(() => department.value === '信息部')
-const canExport = computed(() => department.value === '信息部')
+const canExport = computed(() => true)  // 所有用户都可以导出
  
 const getEditableColumns = computed(() => {
   switch (department.value) {
@@ -412,25 +412,21 @@ const handleLogin = async () => {
     const response = await axios.post(`${API_BASE_URL}/login`, loginForm.value)
     
     if (response.data.need_change_password) {
-      // 如果需要修改密码，显示修改密码表单
+      // 如果需要修改密码，保存临时 token 并显示修改密码表单
+      tempToken.value = response.data.token
+      username.value = loginForm.value.username
       showChangePassword.value = true
-      tempToken.value = response.data.token // 保存临时token
-      username.value = loginForm.value.username
     } else {
-      // 不需要修改密码，正常登录
+      // 正常登录流程
       localStorage.setItem('token', response.data.token)
-      username.value = loginForm.value.username
       department.value = response.data.department
       isLoggedIn.value = true
-      
-      // 加载用户设置
-      showCompleted.value = response.data.settings.show_completed
-      pageSize.value = response.data.settings.page_size
-      
       await loadMaterials()
     }
+    
   } catch (error) {
-    alert('登录失败')
+    console.error('登录失败:', error)
+    alert('用户名或密码错误')
   }
 }
 
@@ -443,11 +439,14 @@ const handleChangePassword = async () => {
   }
 
   try {
+    // 如果是首次登录修改密码，直接使用临时 token
+    const token = tempToken.value || localStorage.getItem('token')
+    
     await axios.put(`${API_BASE_URL}/user/password`, {
       newPassword: changePasswordForm.value.newPassword
     }, {
       headers: { 
-        Authorization: `Bearer ${localStorage.getItem('token')}`,
+        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json'
       }
     })
@@ -465,6 +464,8 @@ const handleChangePassword = async () => {
       // 更新 token 和登录状态
       localStorage.setItem('token', response.data.token)
       department.value = response.data.department
+      isLoggedIn.value = true
+      tempToken.value = ''  // 清除临时 token
       
       // 清空修改密码表单
       changePasswordForm.value.newPassword = ''
@@ -678,35 +679,69 @@ const loadMaterials = async () => {
 
 // 导出Excel
 const exportToExcel = async () => {
-  if (!canExport.value) {
-    alert('没有权限导出数据')
-    return
-  }
-
   try {
-    // 获取符合条件的数据
-    const response = await axios.get(`${API_BASE_URL}/materials/export`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+    // 根据部门获取可见字段
+    const visibleFields = computed(() => {
+      const baseFields = ['物料', '物料描述', '物料组', '市场', '备注1', '备注2', '生产厂商', '基本计量单位']
+      const financeFields = [
+        '评估分类', '销售订单库存', '价格确定', '价格控制', '标准价格', '价格单位',
+        '用QS的成本核算', '物料来源', '差异码', '物料状态', '成本核算批量'
+      ]
+      const otherFields = [
+        '检测时间QC', '最小批量大小PUR', '舍入值PUR', '计划交货时间PUR',
+        'MRP控制者', 'MRP类型', '批量程序', '固定批量', '再订货点', 
+        '安全库存', '批量大小', '舍入值', '采购类型', '收货处理时间', 
+        '计划交货时间', 'MRP区域', '反冲', '批量输入', '自制生产时间', 
+        '策略组', '综合MRP', '消耗模式', '向后跨期期间', '向后跨期时间', 
+        '独立集中', '计划时间界', '生产评估', '生产计划'
+      ]
+
+      switch (department.value) {
+        case '信息部':
+          return [...baseFields, ...financeFields, ...otherFields]
+        case '财务部':
+          return [...baseFields, ...financeFields]
+        case '采购部':
+          return [...baseFields, '最小批量大小PUR', '舍入值PUR', '计划交货时间PUR']
+        case 'QC检测室':
+          return [...baseFields, '检测时间QC']
+        case '运营管理部':
+          return [...baseFields, ...otherFields]
+        default:
+          return baseFields
+      }
     })
 
-    if (!response.data || response.data.length === 0) {
-      alert('没有可导出的数据')
-      return
-    }
+    // 获取未完成的数据
+    const response = await axios.get(`${API_BASE_URL}/materials`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+      params: {
+        page: 1,
+        page_size: 999999,  // 获取所有数据
+        show_completed: false  // 只获取未完成的
+      }
+    })
 
-    // 导出Excel
-    const ws = XLSX.utils.json_to_sheet(response.data)
+    // 过滤字段
+    const filteredData = response.data.items.map((item: any) => {
+      const filtered: any = {}
+      visibleFields.value.forEach(field => {
+        filtered[field] = item[field]
+      })
+      return filtered
+    })
+
+    // 创建工作表
+    const ws = XLSX.utils.json_to_sheet(filteredData)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Materials')
-    XLSX.writeFile(wb, 'materials.xlsx')
 
-    // 重新加载数据以更新显示
-    await loadMaterials()
-    
-    alert(`成功导出 ${response.data.length} 条数据`)
-  } catch (error: any) {
+    // 导出文件
+    XLSX.writeFile(wb, `物料数据_${department.value}_${new Date().toISOString().split('T')[0]}.xlsx`)
+
+  } catch (error) {
     console.error('导出失败:', error)
-    alert(error.response?.data?.detail || '导出失败')
+    alert('导出失败，请重试')
   }
 }
 
@@ -812,7 +847,7 @@ const checkLoginStatus = async () => {
   if (token) {
     try {
       // 验证 token 有效性
-      const response = await axios.get(`${API_BASE_URL}/materials`, {
+      await axios.get(`${API_BASE_URL}/materials`, {
         headers: { Authorization: `Bearer ${token}` },
         params: {
           page: 1,
@@ -826,10 +861,8 @@ const checkLoginStatus = async () => {
       department.value = tokenData.department
       isLoggedIn.value = true
       
-      // 加载数据
-      await loadMaterials()
+      // 移除这里的 loadMaterials 调用
     } catch (error) {
-      // token 无效，清除本地存储
       localStorage.removeItem('token')
       isLoggedIn.value = false
       username.value = ''
@@ -841,16 +874,16 @@ const checkLoginStatus = async () => {
 // 修改 onMounted
 onMounted(async () => {
   getBingWallpaper()
-  checkLoginStatus() // 添加登录状态检查
-  // 如果已经登录，加载用户设置
+  
+  // 如果已经登录，加载用户设置和数据
   const token = localStorage.getItem('token')
   if (token) {
-    isLoggedIn.value = true
     try {
       // 解析 token 获取用户信息
       const tokenData = JSON.parse(atob(token.split('.')[1]))
       username.value = tokenData.username
       department.value = tokenData.department
+      isLoggedIn.value = true
       
       // 从后端获取最新的用户设置
       const response = await axios.get(`${API_BASE_URL}/user/settings`, {
@@ -858,14 +891,16 @@ onMounted(async () => {
       })
       
       // 更新设置状态
-      showCompleted.value = response.data.show_completed
-      pageSize.value = response.data.page_size
+      if (response.data) {
+        showCompleted.value = response.data.show_completed
+        pageSize.value = response.data.page_size
+      }
       
-      // 加载物料数据
+      // 只在这里加载一次数据
       await loadMaterials()
     } catch (error) {
       console.error('加载用户设置失败:', error)
-      handleLogout()  // 如果出错，登出用户
+      handleLogout()
     }
   }
 })
