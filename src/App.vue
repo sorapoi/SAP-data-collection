@@ -1443,6 +1443,11 @@ const sendStatusNotification = async () => {
     alert('推送失败，请检查钉钉机器人配置')
   }
 }
+
+// 关闭系统设置对话框
+const closeSystemSettings = () => {
+  showSystemSettings.value = false
+}
 </script>
 
 <style scoped>
