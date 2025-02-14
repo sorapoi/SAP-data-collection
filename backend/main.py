@@ -351,6 +351,19 @@ async def save_materials(materials: List[Material], user = Depends(authenticate_
         
         conn.commit()
         
+        # 添加导入成功通知
+        try:
+            from push import notify_material_import
+            notify_material_import(
+                success_count=success_count,  # 成功导入的数量
+                user_info={
+                    'username': user['username'],
+                    'department': user['department']
+                }
+            )
+        except Exception as e:
+            logger.error(f"发送导入通知失败: {str(e)}")
+            
         # 返回导入结果
         return {
             "message": f"成功导入 {success_count} 条数据",
@@ -954,6 +967,20 @@ async def api_complete_materials(request: CompleteRequest):
         conn.commit()
         conn.close()
         
+        # 添加完成通知
+        try:
+            from push import notify_material_complete
+            notify_material_complete(
+                completed_count=len(request.material_ids),  # 完成的数量
+                user_info={
+                    'username': request.api_key,
+                    'department': '信息部'
+                }
+            )
+        except Exception as e:
+            logger.error(f"发送完成通知失败: {str(e)}")
+        
+
         return {
             "status": "success",
             "message": f"已更新 {len(request.material_ids)} 条记录的完成时间",
