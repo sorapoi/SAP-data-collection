@@ -40,6 +40,8 @@
         <button @click="openSettings" class="settings-button">设置</button>
         <button @click="openChangePasswordModal">修改密码</button>
         <button v-if="department === '信息部'" @click="openUserManagement">用户管理</button>
+        <button v-if="department === '信息部'" @click="openSystemSettings">系统设置</button>
+        <button v-if="department === '信息部'" @click="sendStatusNotification">推送统计</button>
         <button @click="handleLogout">退出</button>
         <div class="right-buttons">
           <label v-if="canImport" class="file-input-label">
@@ -248,6 +250,33 @@
         <div class="modal-buttons">
           <button @click="handleChangePassword">确认</button>
           <button @click="closeChangePasswordModal">取消</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 添加系统设置对话框 -->
+    <div v-if="showSystemSettings" class="modal">
+      <div class="modal-content">
+        <h2>系统设置</h2>
+        <div class="form-group">
+          <label>钉钉机器人 Webhook URL</label>
+          <input 
+            type="text" 
+            v-model="systemSettings.dingTalkUrl" 
+            placeholder="请输入钉钉机器人 Webhook URL"
+          >
+        </div>
+        <div class="form-group">
+          <label>关键词（每行一个）</label>
+          <textarea
+            v-model="keywordsText"
+            placeholder="请输入关键词，每行一个"
+            rows="3"
+          ></textarea>
+        </div>
+        <div class="modal-buttons">
+          <button @click="saveSystemSettings">保存</button>
+          <button @click="closeSystemSettings">取消</button>
         </div>
       </div>
     </div>
@@ -1328,6 +1357,90 @@ const openChangePasswordModal = () => {
 // 关闭修改密码对话框
 const closeChangePasswordModal = () => {
   showChangePassword.value = false
+}
+
+// 系统设置相关状态
+const showSystemSettings = ref(false)
+const systemSettings = ref({
+  dingTalkUrl: '',
+  keywords: []
+})
+
+// 添加关键词相关状态
+const keywordsText = ref('')
+
+// 修改打开系统设置对话框函数
+const openSystemSettings = async () => {
+  try {
+    // 获取当前设置
+    const response = await axios.get(`${API_BASE_URL}/system/settings`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+    })
+    systemSettings.value = {
+      dingTalkUrl: response.data.dingTalkUrl,
+      keywords: response.data.keywords
+    }
+    keywordsText.value = response.data.keywords.join('\n')
+    showSystemSettings.value = true
+  } catch (error) {
+    console.error('获取系统设置失败:', error)
+    alert('获取系统设置失败')
+  }
+}
+
+// 修改保存系统设置函数
+const saveSystemSettings = async () => {
+  try {
+    const keywords = keywordsText.value
+      .split('\n')
+      .map(k => k.trim())
+      .filter(k => k)
+    
+    await axios.post(
+      `${API_BASE_URL}/system/settings`,
+      {
+        dingTalkUrl: systemSettings.value.dingTalkUrl,
+        keywords: keywords
+      },
+      {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      }
+    )
+    alert('系统设置保存成功')
+    showSystemSettings.value = false
+  } catch (error) {
+    console.error('保存系统设置失败:', error)
+    alert('保存系统设置失败')
+  }
+}
+
+// 发送物料状态统计通知
+const sendStatusNotification = async () => {
+  try {
+    // 获取物料状态统计
+    const response = await axios.get(
+      `${API_BASE_URL}/materials/status`,
+      {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      }
+    )
+    
+    // 发送钉钉通知
+    const notifyResponse = await axios.post(
+      `${API_BASE_URL}/notify/status`,
+      response.data,
+      {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      }
+    )
+    
+    if (notifyResponse.data.message) {
+      alert('推送成功')
+    }
+  } catch (error) {
+    console.error('推送失败:', error)
+    alert('推送失败，请检查钉钉机器人配置')
+  }
 }
 </script>
 

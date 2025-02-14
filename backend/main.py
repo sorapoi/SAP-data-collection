@@ -11,6 +11,8 @@ import mysql.connector
 from mysql.connector import Error
 import logging
 import socket
+import toml
+import os.path
 
 logging.basicConfig(
     level=logging.INFO,
@@ -118,6 +120,11 @@ class APIAuth(BaseModel):
 class CompleteRequest(BaseModel):
     api_key: str
     material_ids: List[str]
+
+# 修改系统设置模型
+class SystemSettings(BaseModel):
+    dingTalkUrl: str
+    keywords: List[str]
 
 # 数据库连接函数
 def get_db_connection():
@@ -1036,4 +1043,202 @@ async def update_password(
         
     finally:
         conn.close()
+
+# 获取系统设置
+@app.get("/system/settings")
+async def get_system_settings(user = Depends(authenticate_user)):
+    if user["department"] != "信息部":
+        raise HTTPException(status_code=403, detail="无权访问系统设置")
+    
+    try:
+        config = toml.load('init.toml')
+        return {
+            "dingTalkUrl": config['push']['dingding']['url'],
+            "keywords": config['push']['dingding'].get('keywords', ['SAP'])
+        }
+    except Exception as e:
+        logger.error(f"读取系统设置失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="读取系统设置失败")
+
+# 保存系统设置
+@app.post("/system/settings")
+async def save_system_settings(
+    settings: SystemSettings,
+    user = Depends(authenticate_user)
+):
+    if user["department"] != "信息部":
+        raise HTTPException(status_code=403, detail="无权修改系统设置")
+    
+    try:
+        config = {}
+        try:
+            config = toml.load('init.toml')
+        except:
+            pass
+        
+        # 确保配置结构存在
+        if 'push' not in config:
+            config['push'] = {}
+        if 'dingding' not in config['push']:
+            config['push']['dingding'] = {}
+        
+        # 更新钉钉机器人 URL
+        config['push']['dingding']['url'] = settings.dingTalkUrl
+        config['push']['dingding']['keywords'] = settings.keywords
+        
+        # 保存配置
+        with open('init.toml', 'w', encoding='utf-8') as f:
+            toml.dump(config, f)
+        
+        return {"message": "系统设置保存成功"}
+        
+    except Exception as e:
+        logger.error(f"保存系统设置失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="保存系统设置失败")
+
+# 添加获取物料状态统计接口
+@app.get("/materials/status")
+async def get_materials_status(user = Depends(authenticate_user)):
+    if user["department"] != "信息部":
+        raise HTTPException(status_code=403, detail="无权访问")
+        
+    try:
+        conn = get_db_connection()
+        c = conn.cursor()
+        
+        # 查询未完成的物料总数
+        c.execute('''
+            SELECT COUNT(*) 
+            FROM materials 
+            WHERE 完成时间 IS NULL OR 完成时间 = ''
+        ''')
+        total_incomplete = c.fetchone()[0]
+        
+        # 查询财务部未完成的物料数量
+        c.execute('''
+            SELECT COUNT(*) 
+            FROM materials 
+            WHERE (完成时间 IS NULL OR 完成时间 = '')
+            AND (
+                标准价格 IS NULL OR 标准价格 = '' 
+            )
+        ''')
+        finance_incomplete = c.fetchone()[0]
+        
+        # 查询运营部未完成的物料数量
+        c.execute('''
+            SELECT COUNT(*) 
+            FROM materials 
+            WHERE (完成时间 IS NULL OR 完成时间 = '')
+            AND (
+                MRP控制者 IS NULL OR MRP控制者 = '' OR
+                最小批量大小PUR IS NULL OR 最小批量大小PUR = '' OR
+                舍入值PUR IS NULL OR 舍入值PUR = '' OR
+                计划交货时间PUR IS NULL OR 计划交货时间PUR = '' OR
+                检测时间QC IS NULL OR 检测时间QC = ''
+            )
+        ''')
+        operation_incomplete = c.fetchone()[0]
+        
+        return {
+            "count": total_incomplete,
+            "finance_incomplete": finance_incomplete,
+            "operation_incomplete": operation_incomplete
+        }
+        
+    except Exception as e:
+        logger.error(f"获取物料状态统计失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="获取物料状态统计失败")
+        
+    finally:
+        conn.close()
+
+# 添加发送状态通知接口
+@app.post("/notify/status")
+async def send_status_notification(
+    status_info: dict,
+    user = Depends(authenticate_user)
+):
+    if user["department"] != "信息部":
+        raise HTTPException(status_code=403, detail="无权发送通知")
+        
+    try:
+        from push import notify_material_status
+        success = notify_material_status(status_info)
+        
+        if success:
+            return {"message": "通知发送成功"}
+        else:
+            raise HTTPException(status_code=500, detail="通知发送失败")
+            
+    except Exception as e:
+        logger.error(f"发送状态通知失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="发送状态通知失败")
+
+# 添加初始化配置文件函数
+def init_config():
+    """
+    初始化配置文件
+    如果配置文件不存在，创建默认配置
+    """
+    config_file = 'init.toml'
+    
+    # 检查配置文件是否存在
+    if not os.path.exists(config_file):
+        logger.info("配置文件不存在，创建默认配置")
+        
+        # 默认配置
+        default_config = {
+            'push': {
+                'dingding': {
+                    'url': '',  # 默认为空，需要通过系统设置配置
+                    'keywords': ['SAP']  # 默认关键词
+                }
+            }
+        }
+        
+        try:
+            # 创建配置文件
+            with open(config_file, 'w', encoding='utf-8') as f:
+                toml.dump(default_config, f)
+            logger.info("默认配置文件创建成功")
+        except Exception as e:
+            logger.error(f"创建配置文件失败: {str(e)}")
+            raise Exception("无法创建配置文件")
+    else:
+        # 验证配置文件结构
+        try:
+            config = toml.load(config_file)
+            # 确保必要的配置项存在
+            if 'push' not in config:
+                config['push'] = {}
+            if 'dingding' not in config['push']:
+                config['push']['dingding'] = {}
+            if 'url' not in config['push']['dingding']:
+                config['push']['dingding']['url'] = ''
+            if 'keywords' not in config['push']['dingding']:
+                config['push']['dingding']['keywords'] = ['SAP']
+                
+            # 保存更新后的配置
+            with open(config_file, 'w', encoding='utf-8') as f:
+                toml.dump(config, f)
+                
+            logger.info("配置文件验证完成")
+        except Exception as e:
+            logger.error(f"验证配置文件失败: {str(e)}")
+            raise Exception("配置文件格式错误")
+
+# 在应用启动时初始化配置
+@app.on_event("startup")
+async def startup_event():
+    """
+    应用启动时的初始化操作
+    """
+    try:
+        # 初始化配置文件
+        init_config()
+        logger.info("应用启动初始化完成")
+    except Exception as e:
+        logger.error(f"应用启动初始化失败: {str(e)}")
+        raise e
         
