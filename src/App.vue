@@ -1274,7 +1274,8 @@ const loadTableData = async () => {
     // 构建查询参数
     const params = new URLSearchParams({
       page: currentPage.value.toString(),
-      page_size: pageSize.value.toString()
+      page_size: pageSize.value.toString(),
+      show_completed: showCompleted.value.toString()
     })
 
     // 添加搜索参数
