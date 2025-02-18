@@ -38,6 +38,7 @@
           <span class="department">{{ department }}</span>
         </div>
         <button @click="openSettings" class="settings-button">设置</button>
+        <button @click="openEmailSettings">设置邮箱</button>
         <button @click="openChangePasswordModal">修改密码</button>
         <button v-if="department === '信息部'" @click="openUserManagement">用户管理</button>
         <button v-if="department === '信息部'" @click="openSystemSettings">系统设置</button>
@@ -280,6 +281,25 @@
         </div>
       </div>
     </div>
+
+    <!-- 添加邮箱设置对话框 -->
+    <div v-if="showEmailSettings" class="modal">
+      <div class="modal-content">
+        <h2>邮箱设置</h2>
+        <div class="form-group">
+          <label>邮箱地址</label>
+          <input 
+            type="email" 
+            v-model="emailForm.email" 
+            placeholder="请输入邮箱地址"
+          >
+        </div>
+        <div class="modal-buttons">
+          <button @click="saveEmailSettings">保存</button>
+          <button @click="showEmailSettings = false">取消</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -440,22 +460,30 @@ const handleLogin = async () => {
   try {
     const response = await axios.post(`${API_BASE_URL}/login`, loginForm.value)
     
-    if (response.data.need_change_password) {
-      // 如果需要修改密码，保存临时 token 并显示修改密码表单
-      tempToken.value = response.data.token
-      username.value = loginForm.value.username
-      showChangePassword.value = true
-    } else {
-      // 正常登录流程
-      localStorage.setItem('token', response.data.token)
-      department.value = response.data.department
-      isLoggedIn.value = true
-      await loadMaterials()
+    // 保存 token
+    localStorage.setItem('token', response.data.token)
+    
+    // 设置用户信息
+    isLoggedIn.value = true
+    department.value = response.data.department
+    username.value = loginForm.value.username  // 添加这行，保存用户名
+    
+    // 设置用户配置
+    if (response.data.settings) {
+      showCompleted.value = response.data.settings.show_completed
+      pageSize.value = response.data.settings.page_size
     }
     
-  } catch (error) {
-    console.error('登录失败:', error)
-    alert('用户名或密码错误')
+    // 检查是否需要修改密码
+    if (response.data.need_change_password) {
+      showChangePassword.value = true
+    }
+    
+    // 加载表格数据
+    await loadTableData()
+    
+  } catch (error: any) {
+    alert(error.response?.data?.detail || '登录失败')
   }
 }
 
@@ -503,7 +531,7 @@ const handleChangePassword = async () => {
       alert('密码修改成功')
       
       // 重新加载数据
-      await loadMaterials()
+      await loadTableData()
       
     } catch (error) {
       alert('自动重新登录失败，请手动登录')
@@ -664,7 +692,7 @@ const handleFileUpload = async (event: Event) => {
       const response = await axios.post(`${API_BASE_URL}/materials`, processedData, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       })
-      await loadMaterials() // 重新加载数据以显示最新结果
+      await loadTableData() // 重新加载数据以显示最新结果
       
       // 显示导入结果，包括成功和跳过的信息
       const successMessage = response.data.message
@@ -686,7 +714,7 @@ const handleFileUpload = async (event: Event) => {
 }
 
 // 加载物料数据
-const loadMaterials = async () => {
+const loadTableData = async () => {
   try {
     const response = await axios.get(`${API_BASE_URL}/materials`, {
       headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
@@ -875,7 +903,7 @@ const handleCellChange = async (rowIndex: number, header: string, event: Event) 
 // 页码改变处理函数
 const handlePageChange = async (page: number) => {
   currentPage.value = page
-  await loadMaterials()
+  await loadTableData()
 }
 
 // 在现有的 import 语句下添加
@@ -913,7 +941,7 @@ const checkLoginStatus = async () => {
       department.value = tokenData.department
       isLoggedIn.value = true
       
-      // 移除这里的 loadMaterials 调用
+      // 移除这里的 loadTableData 调用
     } catch (error) {
       localStorage.removeItem('token')
       isLoggedIn.value = false
@@ -949,7 +977,7 @@ onMounted(async () => {
       }
       
       // 只在这里加载一次数据
-      await loadMaterials()
+      await loadTableData()
     } catch (error) {
       console.error('加载用户设置失败:', error)
       handleLogout()
@@ -1193,7 +1221,7 @@ const handleSettingsChange = async () => {
     
     // 重新加载数据
     currentPage.value = 1
-    await loadMaterials()
+    await loadTableData()
   } catch (error) {
     console.error('保存设置失败:', error)
     alert('保存设置失败')
@@ -1253,11 +1281,12 @@ const searchForm = ref({
 
 // 添加防抖函数
 const debounce = (fn: Function, delay: number) => {
-  let timer: NodeJS.Timeout | null = null
+  let timer: number | null = null
   return (...args: any[]) => {
     if (timer) clearTimeout(timer)
     timer = setTimeout(() => {
-      fn.apply(null, args)
+      fn(...args)
+      timer = null
     }, delay)
   }
 }
@@ -1267,41 +1296,6 @@ const handleSearch = debounce(async () => {
   currentPage.value = 1  // 重置页码
   await loadTableData()
 }, 300)
-
-// 修改加载表格数据的函数
-const loadTableData = async () => {
-  try {
-    // 构建查询参数
-    const params = new URLSearchParams({
-      page: currentPage.value.toString(),
-      page_size: pageSize.value.toString(),
-      show_completed: showCompleted.value.toString()
-    })
-
-    // 添加搜索参数
-    if (searchForm.value.物料) {
-      params.append('物料', searchForm.value.物料)
-    }
-    if (searchForm.value.物料描述) {
-      params.append('物料描述', searchForm.value.物料描述)
-    }
-    if (searchForm.value.物料组) {
-      params.append('物料组', searchForm.value.物料组)
-    }
-
-    const response = await axios.get(
-      `${API_BASE_URL}/materials?${params.toString()}`,
-      {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      }
-    )
-    tableData.value = response.data.items
-    totalItems.value = response.data.total
-    totalPages.value = response.data.total_pages
-  } catch (error) {
-    console.error('加载数据失败:', error)
-  }
-}
 
 // 新用户表单状态
 const newUser = ref({
@@ -1447,6 +1441,43 @@ const sendStatusNotification = async () => {
 // 关闭系统设置对话框
 const closeSystemSettings = () => {
   showSystemSettings.value = false
+}
+
+// 添加邮箱设置相关状态
+const showEmailSettings = ref(false)
+const emailForm = ref({
+  email: ''
+})
+
+// 打开邮箱设置对话框
+const openEmailSettings = async () => {
+  try {
+    // 获取当前用户邮箱
+    const response = await axios.get(`${API_BASE_URL}/user/email`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+    })
+    emailForm.value.email = response.data.email || ''
+    showEmailSettings.value = true
+  } catch (error) {
+    console.error('获取邮箱设置失败:', error)
+    alert('获取邮箱设置失败')
+  }
+}
+
+// 保存邮箱设置
+const saveEmailSettings = async () => {
+  try {
+    await axios.put(
+      `${API_BASE_URL}/user/email`,
+      { email: emailForm.value.email },
+      { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
+    )
+    showEmailSettings.value = false
+    alert('邮箱设置已保存')
+  } catch (error) {
+    console.error('保存邮箱设置失败:', error)
+    alert('保存邮箱设置失败')
+  }
 }
 </script>
 
