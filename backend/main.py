@@ -14,6 +14,8 @@ import socket
 import toml
 import os.path
 from utils import get_materials_status, get_email_recipients
+from push import notify_material_import, notify_material_complete, notify_material_status
+from scheduler import init_scheduler
 
 logging.basicConfig(
     level=logging.INFO,
@@ -361,7 +363,7 @@ async def save_materials(materials: List[Material], user = Depends(authenticate_
         
         # 添加导入成功通知
         try:
-            from push import notify_material_import
+            
             notify_material_import(
                 success_count=success_count,  # 成功导入的数量
                 user_info={
@@ -981,7 +983,7 @@ async def api_complete_materials(request: CompleteRequest):
         
         # 添加完成通知
         try:
-            from push import notify_material_complete
+
             notify_material_complete(
                 completed_count=len(request.material_ids),  # 完成的数量
                 user_info={
@@ -1217,7 +1219,6 @@ async def save_system_settings(settings: SystemSettings, user = Depends(authenti
             toml.dump(config, f)
             
         # 重新初始化定时任务
-        from scheduler import init_scheduler  # 动态导入避免循环引用
         init_scheduler()
             
         return {"message": "设置已保存"}
@@ -1249,7 +1250,6 @@ async def send_status_notification(
             for recipient in email_recipients
         ]
         
-        from push import notify_material_status
         success = notify_material_status(status_info)
         
         if success:
@@ -1323,7 +1323,6 @@ async def startup_event():
         init_config()
         
         # 初始化定时任务
-        from scheduler import init_scheduler  # 动态导入避免循环引用
         init_scheduler()
         
         logger.info("应用启动初始化完成")
@@ -1471,7 +1470,6 @@ async def import_system_settings(
             raise HTTPException(status_code=500, detail="保存配置文件失败")
             
         # 重新初始化定时任务
-        from scheduler import init_scheduler  # 动态导入避免循环引用
         init_scheduler()
             
         return {"message": "配置导入成功"}

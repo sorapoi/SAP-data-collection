@@ -1,4 +1,5 @@
-FROM python:3.10-slim
+# 使用官方 Python 基础镜像
+FROM python:3.11-slim
 
 # 设置工作目录
 WORKDIR /app/materials
@@ -18,12 +19,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN mkdir -p /app/materials/data
 
 # 复制应用代码
-COPY main.py .
+COPY main.py scheduler.py utils.py push.py ./
 
 # 设置环境变量
 ENV PYTHONUNBUFFERED=1
 ENV DATABASE_PATH=/app/materials/data/materials.db
 ENV ENV=production
+ENV TZ=Asia/Shanghai
 
 # 暴露端口
 EXPOSE 8000

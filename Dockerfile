@@ -32,4 +32,8 @@ ENV NGINX_ENVSUBST_TEMPLATE_DIR=/etc/nginx/templates
 ENV NGINX_ENVSUBST_TEMPLATE_SUFFIX=.template
 ENV NGINX_ENVSUBST_OUTPUT_DIR=/etc/nginx/conf.d
 
+# 设置时区
+ENV TZ=Asia/Shanghai
+
+
 CMD ["nginx", "-g", "daemon off;"] 
