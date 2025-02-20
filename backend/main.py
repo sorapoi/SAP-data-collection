@@ -125,6 +125,10 @@ class CompleteRequest(BaseModel):
 class SystemSettings(BaseModel):
     dingTalkUrl: str
     keywords: List[str]
+    smtpServer: Optional[str] = None
+    smtpPort: Optional[int] = None
+    smtpUser: Optional[str] = None
+    smtpPassword: Optional[str] = None
 
 # 数据库连接函数
 def get_db_connection():
@@ -160,6 +164,7 @@ def init_db():
             password VARCHAR(100),
             department VARCHAR(50),
             email VARCHAR(100),
+            email_push BOOLEAN DEFAULT FALSE,
             need_change_password BOOLEAN DEFAULT TRUE,
             show_completed BOOLEAN DEFAULT FALSE,
             page_size INT DEFAULT 15
@@ -701,22 +706,24 @@ async def get_user_settings(user = Depends(authenticate_user)):
     
     try:
         c.execute('''
-            SELECT show_completed, page_size 
+            SELECT show_completed, page_size, email_push 
             FROM users 
             WHERE username = %s
         ''', (user["username"],))
         
         result = c.fetchone()
         if result:
-            show_completed, page_size = result
+            show_completed, page_size, email_push = result
             return {
                 "show_completed": bool(show_completed),  # 确保返回布尔值
-                "page_size": int(page_size)  # 确保返回整数
+                "page_size": int(page_size),  # 确保返回整数
+                "email_push": bool(email_push)  # 确保返回布尔值
             }
         
         return {
             "show_completed": False,
-            "page_size": 15
+            "page_size": 15,
+            "email_push": False
         }
         
     except Exception as e:
@@ -739,11 +746,13 @@ async def save_settings(
         c.execute('''
             UPDATE users 
             SET show_completed = %s,
-                page_size = %s
+                page_size = %s,
+                email_push = %s
             WHERE username = %s
         ''', (
             settings["show_completed"],
             settings["page_size"],
+            settings.get("email_push", False),
             user["username"]
         ))
         
@@ -1079,13 +1088,79 @@ async def get_system_settings(user = Depends(authenticate_user)):
     
     try:
         config = toml.load('init.toml')
-        return {
-            "dingTalkUrl": config['push']['dingding']['url'],
-            "keywords": config['push']['dingding'].get('keywords', ['SAP'])
+        # 获取钉钉配置
+        settings = {
+            "dingTalkUrl": "",
+            "keywords": ['SAP'],
+            "smtpServer": "",
+            "smtpPort": 25,
+            "smtpUser": "",
+            "smtpPassword": ""
         }
+        
+        # 获取钉钉配置
+        if 'push' in config and 'dingding' in config['push']:
+            settings["dingTalkUrl"] = config['push']['dingding'].get('url', '')
+            settings["keywords"] = config['push']['dingding'].get('keywords', ['SAP'])
+        
+        # 获取SMTP配置
+        if 'push' in config and 'email' in config['push']:
+            email_config = config['push']['email']
+            settings.update({
+                "smtpServer": email_config.get('smtp_server', ''),
+                "smtpPort": int(email_config.get('smtp_port', 25)),  # 确保转换为整数
+                "smtpUser": email_config.get('smtp_user', ''),
+                "smtpPassword": email_config.get('smtp_password', '')
+            })
+        
+        return settings
+        
     except Exception as e:
         logger.error(f"读取系统设置失败: {str(e)}")
         raise HTTPException(status_code=500, detail="读取系统设置失败")
+
+# 获取用户邮箱信息
+@app.get("/user/email")
+async def get_user_email(user = Depends(authenticate_user)):
+    conn = get_db_connection()
+    c = conn.cursor()
+    
+    try:
+        c.execute('SELECT email FROM users WHERE username = %s', (user["username"],))
+        result = c.fetchone()
+        
+        if result:
+            return {"email": result[0]}
+        return {"email": None}
+        
+    except Exception as e:
+        logger.error(f"Error getting user email: {str(e)}")
+        raise HTTPException(status_code=500, detail="获取邮箱信息失败")
+    
+    finally:
+        conn.close()
+
+# 更新用户邮箱信息
+@app.put("/user/email")
+async def update_user_email(settings: UserSettings, user = Depends(authenticate_user)):
+    if not settings.email:
+        raise HTTPException(status_code=400, detail="邮箱不能为空")
+        
+    conn = get_db_connection()
+    c = conn.cursor()
+    
+    try:
+        c.execute('UPDATE users SET email = %s WHERE username = %s', (settings.email, user["username"]))
+        conn.commit()
+        return {"message": "邮箱更新成功"}
+        
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Error updating user email: {str(e)}")
+        raise HTTPException(status_code=500, detail="更新邮箱失败")
+    
+    finally:
+        conn.close()
 
 # 保存系统设置
 @app.post("/system/settings")
@@ -1112,6 +1187,20 @@ async def save_system_settings(
         # 更新钉钉机器人 URL
         config['push']['dingding']['url'] = settings.dingTalkUrl
         config['push']['dingding']['keywords'] = settings.keywords
+
+        # 确保email配置结构存在
+        if 'email' not in config['push']:
+            config['push']['email'] = {}
+
+        # 更新SMTP配置
+        if settings.smtpServer:
+            config['push']['email']['smtp_server'] = settings.smtpServer
+        if settings.smtpPort:
+            config['push']['email']['smtp_port'] = settings.smtpPort
+        if settings.smtpUser:
+            config['push']['email']['smtp_user'] = settings.smtpUser
+        if settings.smtpPassword:
+            config['push']['email']['smtp_password'] = settings.smtpPassword
         
         # 保存配置
         with open('init.toml', 'w', encoding='utf-8') as f:
@@ -1180,7 +1269,25 @@ async def get_materials_status(user = Depends(authenticate_user)):
     finally:
         conn.close()
 
-# 添加发送状态通知接口
+# 添加获取需要接收邮件的用户列表函数
+async def get_email_recipients():
+    conn = get_db_connection()
+    c = conn.cursor()
+    
+    try:
+        # 获取所有启用邮件推送且设置了邮箱的用户
+        c.execute('''
+            SELECT username, email, department 
+            FROM users 
+            WHERE email_push = TRUE 
+            AND email IS NOT NULL 
+            AND email != ''
+        ''')
+        return c.fetchall()
+    finally:
+        conn.close()
+
+# 修改发送状态通知接口
 @app.post("/notify/status")
 async def send_status_notification(
     status_info: dict,
@@ -1190,6 +1297,19 @@ async def send_status_notification(
         raise HTTPException(status_code=403, detail="无权发送通知")
         
     try:
+        # 获取需要接收邮件的用户列表
+        email_recipients = await get_email_recipients()
+        
+        # 添加邮件接收者信息到状态信息中
+        status_info['email_recipients'] = [
+            {
+                'username': recipient[0],
+                'email': recipient[1],
+                'department': recipient[2]
+            }
+            for recipient in email_recipients
+        ]
+        
         from push import notify_material_status
         success = notify_material_status(status_info)
         
@@ -1334,4 +1454,6 @@ async def update_material_from_spider(
     except Exception as e:
         logger.error(f"处理物料信息失败: {str(e)}")
         raise HTTPException(status_code=500, detail=f"处理失败: {str(e)}")
+
+
         

@@ -2,6 +2,14 @@ import requests
 import toml
 import os
 from datetime import datetime
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.header import Header
+import logging
+
+# 设置日志记录
+logger = logging.getLogger(__name__)
 
 class DingTalkBot:
     def __init__(self):
@@ -123,24 +131,94 @@ def notify_material_complete(completed_count, user_info):
     return bot.send_message(message, msg_type="markdown")
 
 def notify_material_status(status_info):
-    """
-    发送物料状态统计通知
-    
-    Args:
-        status_info: dict, 包含统计信息
-    """
-    bot = DingTalkBot()
-    
-    # 构建 Markdown 格式的消息
-    message = f"""
-### SAP物料未完成状态统计
-- **未完成物料**: {status_info.get('count')} 条
-- **财务部待处理**: {status_info.get('finance_incomplete')} 条
-- **运营部待处理**: {status_info.get('operation_incomplete')} 条
+    success = True
+    try:
+        # 总是发送钉钉通知
+        dingtalk_success = send_dingtalk_notification(status_info)
+        if not dingtalk_success:
+            logger.warning("钉钉通知发送失败")
+            success = False
+        
+        # 如果有邮件接收者，则发送邮件通知
+        if 'email_recipients' in status_info and status_info['email_recipients']:
+            try:
+                send_email_notification(status_info)
+            except Exception as e:
+                logger.error(f"邮件通知发送失败: {str(e)}")
+                success = False
+        
+        return success
+    except Exception as e:
+        logger.error(f"发送通知失败: {str(e)}")
+        return False
+
+def send_dingtalk_notification(status_info):
+    """发送钉钉通知"""
+    try:
+        bot = DingTalkBot()
+        
+        # 构建 Markdown 格式的消息
+        message = f"""
+### SAP物料数据统计
+- **未完成物料总数**: {status_info['count']}
+- **财务部待处理**: {status_info['finance_incomplete']}
+- **运营部待处理**: {status_info['operation_incomplete']}
 - **统计时间**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-    """
+        """
+        
+        return bot.send_message(message, msg_type="markdown")
+    except Exception as e:
+        logger.error(f"发送钉钉通知失败: {str(e)}")
+        return False  # 返回 False 而不是抛出异常
+
+def send_email_notification(status_info):
+    try:
+        # 从配置文件读取SMTP设置
+        config = toml.load('init.toml')
+        email_config = config['push']['email']
+        
+        # 创建邮件内容
+        subject = "SAP物料数据统计"
+        body = f"""
+        物料数据统计信息：
+        
+        未完成物料总数：{status_info['count']}
+        财务部待处理：{status_info['finance_incomplete']}
+        运营部待处理：{status_info['operation_incomplete']}
+        统计时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+        """
+        
+        # 发送邮件给每个接收者
+        for recipient in status_info['email_recipients']:
+            send_email(
+                smtp_server=email_config['smtp_server'],
+                smtp_port=email_config['smtp_port'],
+                smtp_user=email_config['smtp_user'],
+                smtp_password=email_config['smtp_password'],
+                to_email=recipient['email'],
+                subject=subject,
+                body=body
+            )
+            logger.info(f"成功发送邮件给 {recipient['email']}")
+            
+    except Exception as e:
+        logger.error(f"发送邮件通知失败: {str(e)}")
+        raise
+
+def send_email(smtp_server, smtp_port, smtp_user, smtp_password, to_email, subject, body):
+    message = MIMEText(body, 'plain', 'utf-8')
+    message['Subject'] = Header(subject, 'utf-8')
+    message['From'] = smtp_user
+    message['To'] = to_email
     
-    return bot.send_message(message, msg_type="markdown")
+    try:
+        with smtplib.SMTP(smtp_server, smtp_port) as server:
+            if smtp_user and smtp_password:
+                server.login(smtp_user, smtp_password)
+            server.send_message(message)
+    except Exception as e:
+        logger.error(f"发送邮件失败: {str(e)}")
+        raise
 
 
 

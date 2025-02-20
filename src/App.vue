@@ -171,6 +171,16 @@
           </label>
         </div>
         <div class="form-group">
+          <label class="checkbox-label">
+            <input 
+              type="checkbox" 
+              v-model="emailPush"
+              @change="handleSettingsChange"
+            >
+            接收邮件推送
+          </label>
+        </div>
+        <div class="form-group">
           <label>显示行数</label>
           <input 
             type="number" 
@@ -274,6 +284,38 @@
             placeholder="请输入关键词，每行一个"
             rows="3"
           ></textarea>
+        </div>
+        <div class="form-group">
+          <label>SMTP服务器地址</label>
+          <input 
+            type="text" 
+            v-model="systemSettings.smtpServer" 
+            placeholder="请输入SMTP服务器地址"
+          >
+        </div>
+        <div class="form-group">
+          <label>SMTP端口</label>
+          <input 
+            type="number" 
+            v-model="systemSettings.smtpPort" 
+            placeholder="请输入SMTP端口"
+          >
+        </div>
+        <div class="form-group">
+          <label>SMTP用户名</label>
+          <input 
+            type="text" 
+            v-model="systemSettings.smtpUser" 
+            placeholder="请输入SMTP用户名"
+          >
+        </div>
+        <div class="form-group">
+          <label>SMTP密码</label>
+          <input 
+            type="password" 
+            v-model="systemSettings.smtpPassword" 
+            placeholder="请输入SMTP密码"
+          >
         </div>
         <div class="modal-buttons">
           <button @click="saveSystemSettings">保存</button>
@@ -455,6 +497,9 @@ const getEditableColumns = computed(() => {
   }
 })
 
+// 在其他 ref 定义附近添加
+const emailPush = ref(false)
+
 // 登录处理
 const handleLogin = async () => {
   try {
@@ -472,6 +517,10 @@ const handleLogin = async () => {
     if (response.data.settings) {
       showCompleted.value = response.data.settings.show_completed
       pageSize.value = response.data.settings.page_size
+      // 如果后端返回了 email_push 设置，则更新它
+      if ('email_push' in response.data.settings) {
+        emailPush.value = response.data.settings.email_push
+      }
     }
     
     // 检查是否需要修改密码
@@ -974,6 +1023,7 @@ onMounted(async () => {
       if (response.data) {
         showCompleted.value = response.data.show_completed
         pageSize.value = response.data.page_size
+        emailPush.value = response.data.email_push || false
       }
       
       // 只在这里加载一次数据
@@ -1203,6 +1253,8 @@ const loadUserSettings = async () => {
       headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
     })
     showCompleted.value = response.data.show_completed
+    pageSize.value = response.data.page_size
+    emailPush.value = response.data.email_push || false
   } catch (error) {
     console.error('加载用户设置失败:', error)
   }
@@ -1214,7 +1266,8 @@ const handleSettingsChange = async () => {
     // 保存设置到服务器
     await axios.post(`${API_BASE_URL}/user/settings`, {
       show_completed: showCompleted.value,
-      page_size: pageSize.value
+      page_size: pageSize.value,
+      email_push: emailPush.value
     }, {
       headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
     })
@@ -1358,7 +1411,11 @@ const closeChangePasswordModal = () => {
 const showSystemSettings = ref(false)
 const systemSettings = ref({
   dingTalkUrl: '',
-  keywords: []
+  keywords: [],
+  smtpServer: '',   // 添加这些 SMTP 相关字段
+  smtpPort: 25,
+  smtpUser: '',
+  smtpPassword: ''
 })
 
 // 添加关键词相关状态
@@ -1371,10 +1428,17 @@ const openSystemSettings = async () => {
     const response = await axios.get(`${API_BASE_URL}/system/settings`, {
       headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
     })
+    
+    // 更新所有设置字段
     systemSettings.value = {
-      dingTalkUrl: response.data.dingTalkUrl,
-      keywords: response.data.keywords
+      dingTalkUrl: response.data.dingTalkUrl || '',
+      keywords: response.data.keywords || [],
+      smtpServer: response.data.smtpServer || '',
+      smtpPort: response.data.smtpPort || 25,
+      smtpUser: response.data.smtpUser || '',
+      smtpPassword: response.data.smtpPassword || ''
     }
+    
     keywordsText.value = response.data.keywords.join('\n')
     showSystemSettings.value = true
   } catch (error) {
@@ -1395,7 +1459,11 @@ const saveSystemSettings = async () => {
       `${API_BASE_URL}/system/settings`,
       {
         dingTalkUrl: systemSettings.value.dingTalkUrl,
-        keywords: keywords
+        keywords: keywords,
+        smtpServer: systemSettings.value.smtpServer,
+        smtpPort: systemSettings.value.smtpPort,
+        smtpUser: systemSettings.value.smtpUser,
+        smtpPassword: systemSettings.value.smtpPassword
       },
       {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
