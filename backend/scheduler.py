@@ -9,6 +9,8 @@ from utils import get_materials_status, get_email_recipients
 
 logger = logging.getLogger(__name__)
 
+_scheduler = None  # 全局变量存储调度器实例
+
 def is_holiday():
     """检查今天是否是节假日"""
     try:
@@ -65,8 +67,14 @@ async def send_daily_notification():
 
 def init_scheduler():
     """初始化定时任务"""
+    global _scheduler
+    
     try:
-        scheduler = BackgroundScheduler()
+        # 如果已经有调度器在运行，先停止它
+        if _scheduler:
+            _scheduler.shutdown()
+            
+        _scheduler = BackgroundScheduler()
         
         # 读取配置文件获取推送时间
         config = toml.load('init.toml')
@@ -74,7 +82,7 @@ def init_scheduler():
         hour, minute = map(int, push_time.split(':'))
         
         # 添加定时任务
-        scheduler.add_job(
+        _scheduler.add_job(
             send_daily_notification,
             CronTrigger(hour=hour, minute=minute),
             id='daily_notification',
@@ -82,7 +90,7 @@ def init_scheduler():
         )
         
         # 启动调度器
-        scheduler.start()
+        _scheduler.start()
         logger.info(f"定时推送任务已启动，推送时间: {push_time}")
         
     except Exception as e:

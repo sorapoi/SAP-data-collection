@@ -13,8 +13,7 @@ import logging
 import socket
 import toml
 import os.path
-from scheduler import init_scheduler
-from utils import get_materials_status, get_email_recipients  # 从 utils 导入
+from utils import get_materials_status, get_email_recipients
 
 logging.basicConfig(
     level=logging.INFO,
@@ -1218,6 +1217,7 @@ async def save_system_settings(settings: SystemSettings, user = Depends(authenti
             toml.dump(config, f)
             
         # 重新初始化定时任务
+        from scheduler import init_scheduler  # 动态导入避免循环引用
         init_scheduler()
             
         return {"message": "设置已保存"}
@@ -1317,14 +1317,15 @@ def init_config():
 # 在应用启动时初始化配置
 @app.on_event("startup")
 async def startup_event():
-    """
-    应用启动时的初始化操作
-    """
+    """应用启动时的初始化操作"""
     try:
         # 初始化配置文件
         init_config()
+        
         # 初始化定时任务
+        from scheduler import init_scheduler  # 动态导入避免循环引用
         init_scheduler()
+        
         logger.info("应用启动初始化完成")
     except Exception as e:
         logger.error(f"应用启动初始化失败: {str(e)}")
@@ -1470,6 +1471,7 @@ async def import_system_settings(
             raise HTTPException(status_code=500, detail="保存配置文件失败")
             
         # 重新初始化定时任务
+        from scheduler import init_scheduler  # 动态导入避免循环引用
         init_scheduler()
             
         return {"message": "配置导入成功"}
