@@ -317,6 +317,36 @@
             placeholder="请输入SMTP密码"
           >
         </div>
+        <!-- 在系统设置对话框中添加自动推送配置 -->
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input 
+              type="checkbox" 
+              v-model="systemSettings.pushEnabled"
+            >
+            启用每日自动推送（节假日不推送）
+          </label>
+        </div>
+
+        <div class="form-group" v-if="systemSettings.pushEnabled">
+          <label>推送时间</label>
+          <input 
+            type="time" 
+            v-model="systemSettings.pushTime"
+          >
+        </div>
+        <div class="settings-actions">
+          <button @click="exportSettings" class="export-button">导出配置</button>
+          <label class="import-button">
+            导入配置
+            <input 
+              type="file" 
+              accept=".toml"
+              @change="importSettings"
+              style="display: none"
+            >
+          </label>
+        </div>
         <div class="modal-buttons">
           <button @click="saveSystemSettings">保存</button>
           <button @click="closeSystemSettings">取消</button>
@@ -1415,7 +1445,9 @@ const systemSettings = ref({
   smtpServer: '',   // 添加这些 SMTP 相关字段
   smtpPort: 25,
   smtpUser: '',
-  smtpPassword: ''
+  smtpPassword: '',
+  pushEnabled: true,
+  pushTime: '09:00'
 })
 
 // 添加关键词相关状态
@@ -1436,7 +1468,9 @@ const openSystemSettings = async () => {
       smtpServer: response.data.smtpServer || '',
       smtpPort: response.data.smtpPort || 25,
       smtpUser: response.data.smtpUser || '',
-      smtpPassword: response.data.smtpPassword || ''
+      smtpPassword: response.data.smtpPassword || '',
+      pushEnabled: response.data.pushEnabled ?? true,
+      pushTime: response.data.pushTime || '09:00'
     }
     
     keywordsText.value = response.data.keywords.join('\n')
@@ -1463,7 +1497,9 @@ const saveSystemSettings = async () => {
         smtpServer: systemSettings.value.smtpServer,
         smtpPort: systemSettings.value.smtpPort,
         smtpUser: systemSettings.value.smtpUser,
-        smtpPassword: systemSettings.value.smtpPassword
+        smtpPassword: systemSettings.value.smtpPassword,
+        pushEnabled: systemSettings.value.pushEnabled,
+        pushTime: systemSettings.value.pushTime
       },
       {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
@@ -1546,6 +1582,80 @@ const saveEmailSettings = async () => {
     console.error('保存邮箱设置失败:', error)
     alert('保存邮箱设置失败')
   }
+}
+
+// 导出配置
+const exportSettings = async () => {
+  try {
+    const response = await axios.get(
+      `${API_BASE_URL}/system/settings/export`,
+      {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+        responseType: 'blob'
+      }
+    )
+    
+    // 从响应头获取文件名
+    const filename = response.headers['content-disposition']?.split('filename=')[1]?.replace(/"/g, '') || 'system_settings.toml'
+    
+    // 创建下载链接
+    const blob = new Blob([response.data], { type: 'application/toml' })
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+  } catch (error) {
+    console.error('导出配置失败:', error)
+    alert('导出配置失败')
+  }
+}
+
+// 导入配置
+const importSettings = async (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  
+  // 检查文件类型
+  if (!file.name.endsWith('.toml')) {
+    alert('请选择 .toml 格式的配置文件')
+    input.value = ''
+    return
+  }
+  
+  try {
+    const formData = new FormData()
+    formData.append('file', file)
+    
+    const response = await axios.post(
+      `${API_BASE_URL}/system/settings/import`,
+      formData,
+      {
+        headers: { 
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'multipart/form-data'
+        }
+      }
+    )
+    
+    alert('配置导入成功')
+    // 重新加载系统设置
+    await openSystemSettings()
+  } catch (error: any) {
+    console.error('导入配置失败:', error)
+    if (error.response?.data?.detail) {
+      alert(`导入失败: ${error.response.data.detail}`)
+    } else {
+      alert('导入配置失败，请检查文件格式')
+    }
+  }
+  
+  // 清空文件输入
+  input.value = ''
 }
 </script>
 
@@ -1998,6 +2108,30 @@ th, td {
 .form-group input[type="number"] {
   width: 80px;
   padding: 4px 8px;
+}
+
+.settings-actions {
+  display: flex;
+  gap: 10px;
+  margin: 20px 0;
+}
+
+.export-button, .import-button {
+  padding: 8px 16px;
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.import-button {
+  background-color: #2196F3;
+}
+
+.export-button:hover, .import-button:hover {
+  opacity: 0.9;
 }
 </style>
 
