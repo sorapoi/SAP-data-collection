@@ -92,22 +92,39 @@ class DingTalkBot:
             return False
 
 
-def notify_material_import(success_count, user_info):
+async def notify_material_import(success_count, user_info):
     """
-    发送物料导入通知
+    发送物料导入通知（钉钉和邮件）
     """
-    bot = DingTalkBot()
-    
-    # 构建 Markdown 格式的消息
-    message = f"""
+    try:
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        message = f"""
 ### SAP物料数据导入通知
 - **成功导入**: {success_count} 条
 - **操作人**: {user_info.get('username')}
 - **部门**: {user_info.get('department')}
-- **时间**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-    """
-    
-    return bot.send_message(message, msg_type="markdown")
+- **时间**: {now}
+        """
+        
+        # 发送钉钉通知
+        bot = DingTalkBot()
+        ding_result = bot.send_message(message, msg_type="markdown")
+        
+        # 获取邮件接收者并发送邮件
+        from utils import get_email_recipients
+        email_recipients = await get_email_recipients()
+        
+        email_result = send_email(
+            subject="SAP物料数据导入通知",
+            body=message,
+            recipients=[{'email': r[1]} for r in email_recipients]
+        )
+        
+        return ding_result or email_result
+        
+    except Exception as e:
+        logger.error(f"发送导入通知失败: {str(e)}")
+        return False
 
 def notify_material_complete(completed_count, user_info):
     """
@@ -191,13 +208,9 @@ def send_email_notification(status_info):
         # 发送邮件给每个接收者
         for recipient in status_info['email_recipients']:
             send_email(
-                smtp_server=email_config['smtp_server'],
-                smtp_port=email_config['smtp_port'],
-                smtp_user=email_config['smtp_user'],
-                smtp_password=email_config['smtp_password'],
-                to_email=recipient['email'],
                 subject=subject,
-                body=body
+                body=body,
+                recipients=[{'email': recipient['email']}]
             )
             logger.info(f"成功发送邮件给 {recipient['email']}")
             
@@ -205,20 +218,39 @@ def send_email_notification(status_info):
         logger.error(f"发送邮件通知失败: {str(e)}")
         raise
 
-def send_email(smtp_server, smtp_port, smtp_user, smtp_password, to_email, subject, body):
-    message = MIMEText(body, 'plain', 'utf-8')
-    message['Subject'] = Header(subject, 'utf-8')
-    message['From'] = smtp_user
-    message['To'] = to_email
-    
+def send_email(subject, body, recipients, is_html=False):
+    """发送邮件通知"""
     try:
-        with smtplib.SMTP(smtp_server, smtp_port) as server:
-            if smtp_user and smtp_password:
-                server.login(smtp_user, smtp_password)
-            server.send_message(message)
+        config = toml.load('init.toml')
+        email_config = config.get('push', {}).get('email', {})
+        
+        if not email_config:
+            logger.error("未找到邮件配置")
+            return False
+            
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = subject
+        msg['From'] = email_config.get('smtp_user')
+        msg['To'] = ', '.join(r['email'] for r in recipients)
+        
+        msg.attach(MIMEText(body, 'html' if is_html else 'plain', 'utf-8'))
+            
+        with smtplib.SMTP(
+            host=email_config.get('smtp_server'),
+            port=email_config.get('smtp_port', 25)
+        ) as server:
+            if email_config.get('smtp_user') and email_config.get('smtp_password'):
+                server.login(
+                    email_config.get('smtp_user'),
+                    email_config.get('smtp_password')
+                )
+            server.send_message(msg)
+            
+        return True
+        
     except Exception as e:
         logger.error(f"发送邮件失败: {str(e)}")
-        raise
+        return False
 
 
 
