@@ -1355,8 +1355,6 @@ async def startup_event():
         logger.error(f"应用启动初始化失败: {str(e)}")
         raise e
 
-
-
 @app.post("/api/materials/update")
 async def update_material_from_spider(
     material_data: dict,
@@ -1367,28 +1365,45 @@ async def update_material_from_spider(
         material_id = material_data.get('material_id')
         details = material_data.get('details', {})
         
-        # 添加日志检查数据
         logger.info(f"收到物料数据: material_id={material_id}")
         logger.info(f"物料详情: {details}")
         
         if not material_id or not details:
             raise HTTPException(status_code=400, detail="缺少必要的数据")
             
-        # 检查 details 的格式
-        if not isinstance(details, dict):
-            logger.error(f"details 格式错误: {type(details)}")
-            raise HTTPException(status_code=400, detail="物料详情格式错误")
-            
-        # 检查必要字段
-        required_fields = ['物料', '物料描述', '物料组']
-        missing_fields = [field for field in required_fields if not details.get(field)]
-        if missing_fields:
-            logger.error(f"缺少必要字段: {missing_fields}")
-            raise HTTPException(status_code=400, detail=f"缺少必要字段: {missing_fields}")
-            
-        # 计算相关字段
-        calculate_fields(details)
-        logger.info(f"处理后的数据: {details}")
+        # 创建 Material 对象并计算字段
+        material = Material(**details)
+        material = calculate_fields(material)
+        
+        # 将 Material 对象转换为字典
+        insert_data = {
+            '物料': details.get('物料', ''),
+            '物料描述': details.get('物料描述', ''),
+            '物料组': details.get('物料组', ''),
+            '市场': details.get('市场', ''),
+            '标准价格': details.get('标准价格', ''),
+            '检测时间QC': details.get('检测时间QC', ''),
+            '基本计量单位': details.get('基本计量单位', ''),
+            '备注1': details.get('备注1', ''),
+            '备注2': details.get('备注2', ''),
+            '生产厂商': details.get('生产厂商', ''),
+            '新建时间': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            '完成时间': None,
+            # 添加计算后的字段
+            '最小批量大小PUR': material.最小批量大小PUR,
+            '舍入值PUR': material.舍入值PUR,
+            '计划交货时间PUR': material.计划交货时间PUR,
+            '价格确定': material.价格确定,
+            '价格控制': material.价格控制,
+            '价格单位': material.价格单位,
+            '用QS的成本核算': material.用QS的成本核算,
+            '物料来源': material.物料来源,
+            '差异码': material.差异码,
+            '物料状态': material.物料状态,
+            '成本核算批量': material.成本核算批量,
+            '评估分类': material.评估分类,
+            '销售订单库存': material.销售订单库存
+        }
         
         # 获取数据库连接
         conn = get_db_connection()
@@ -1403,23 +1418,8 @@ async def update_material_from_spider(
             exists = cursor.fetchone()
             
             if not exists:
-                # 构建插入数据
-                insert_data = {
-                    '物料': details.get('物料', ''),
-                    '物料描述': details.get('物料描述', ''),
-                    '物料组': details.get('物料组', ''),
-                    '市场': details.get('市场', ''),
-                    '基本计量单位': details.get('基本计量单位', ''),
-                    '备注1': details.get('备注1', ''),
-                    '备注2': details.get('备注2', ''),
-                    '生产厂商': details.get('生产厂商', ''),
-                    '当前部门': details.get('当前部门', ''),
-                    '新建时间': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    '完成时间': None
-                }
-                
                 # 构建 SQL 语句
-                fields = ', '.join(insert_data.keys())
+                fields = ', '.join(f'`{field}`' for field in insert_data.keys())
                 placeholders = ', '.join(['%s'] * len(insert_data))
                 sql = f'INSERT INTO materials ({fields}) VALUES ({placeholders})'
                 
