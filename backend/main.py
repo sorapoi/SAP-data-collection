@@ -1227,20 +1227,44 @@ async def save_system_settings(settings: SystemSettings, user = Depends(authenti
         logger.error(f"保存系统设置失败: {str(e)}")
         raise HTTPException(status_code=500, detail="保存系统设置失败")
 
-# 修改状态通知接口
+# 状态获取接口
+@app.get("/materials/status")
+@app.post("/materials/status")
+async def get_materials_status_api(user = Depends(authenticate_user)):
+    """获取物料状态统计"""
+    try:
+        status_info = await get_materials_status(user)
+        
+        if user["department"] == "信息部":
+            email_recipients = await get_email_recipients()
+            status_info['email_recipients'] = [
+                {
+                    'username': recipient[0],
+                    'email': recipient[1],
+                    'department': recipient[2]
+                }
+                for recipient in email_recipients
+            ]
+        
+        return status_info
+        
+    except Exception as e:
+        logger.error(f"获取物料状态失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="获取物料状态失败")
+
+# 推送通知接口
 @app.post("/notify/status")
-async def send_status_notification(
-    status_info: dict,
-    user = Depends(authenticate_user)
-):
+async def send_status_notification(user = Depends(authenticate_user)):
+    """发送状态通知"""
     if user["department"] != "信息部":
         raise HTTPException(status_code=403, detail="无权发送通知")
         
     try:
-        # 获取需要接收邮件的用户列表
-        email_recipients = await get_email_recipients()  # 使用从 utils 导入的函数
+        # 获取状态信息
+        status_info = await get_materials_status(user)
         
-        # 添加邮件接收者信息到状态信息中
+        # 获取邮件接收者列表
+        email_recipients = await get_email_recipients()
         status_info['email_recipients'] = [
             {
                 'username': recipient[0],
@@ -1250,6 +1274,7 @@ async def send_status_notification(
             for recipient in email_recipients
         ]
         
+        # 发送通知
         success = notify_material_status(status_info)
         
         if success:

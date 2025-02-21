@@ -148,33 +148,11 @@ def notify_material_complete(completed_count, user_info):
     return bot.send_message(message, msg_type="markdown")
 
 def notify_material_status(status_info):
+    """发送状态通知（钉钉和邮件）"""
     success = True
     try:
-        # 总是发送钉钉通知
-        dingtalk_success = send_dingtalk_notification(status_info)
-        if not dingtalk_success:
-            logger.warning("钉钉通知发送失败")
-            success = False
-        
-        # 如果有邮件接收者，则发送邮件通知
-        if 'email_recipients' in status_info and status_info['email_recipients']:
-            try:
-                send_email_notification(status_info)
-            except Exception as e:
-                logger.error(f"邮件通知发送失败: {str(e)}")
-                success = False
-        
-        return success
-    except Exception as e:
-        logger.error(f"发送通知失败: {str(e)}")
-        return False
-
-def send_dingtalk_notification(status_info):
-    """发送钉钉通知"""
-    try:
+        # 发送钉钉通知
         bot = DingTalkBot()
-        
-        # 构建 Markdown 格式的消息
         message = f"""
 ### SAP物料数据统计
 - **未完成物料总数**: {status_info['count']}
@@ -183,40 +161,28 @@ def send_dingtalk_notification(status_info):
 - **统计时间**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
         """
         
-        return bot.send_message(message, msg_type="markdown")
+        ding_result = bot.send_message(message, msg_type="markdown")
+        if not ding_result:
+            logger.warning("钉钉通知发送失败")
+            success = False
+        
+        # 发送邮件通知
+        if 'email_recipients' in status_info and status_info['email_recipients']:
+            try:
+                send_email(
+                    subject="SAP物料数据统计",
+                    body=message,
+                    recipients=[{'email': r['email']} for r in status_info['email_recipients']]
+                )
+                logger.info("邮件通知发送成功")
+            except Exception as e:
+                logger.error(f"邮件通知发送失败: {str(e)}")
+                success = False
+        
+        return success
     except Exception as e:
-        logger.error(f"发送钉钉通知失败: {str(e)}")
-        return False  # 返回 False 而不是抛出异常
-
-def send_email_notification(status_info):
-    try:
-        # 从配置文件读取SMTP设置
-        config = toml.load('init.toml')
-        email_config = config['push']['email']
-        
-        # 创建邮件内容
-        subject = "SAP物料数据统计"
-        body = f"""
-        物料数据统计信息：
-        
-        未完成物料总数：{status_info['count']}
-        财务部待处理：{status_info['finance_incomplete']}
-        运营部待处理：{status_info['operation_incomplete']}
-        统计时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-        """
-        
-        # 发送邮件给每个接收者
-        for recipient in status_info['email_recipients']:
-            send_email(
-                subject=subject,
-                body=body,
-                recipients=[{'email': recipient['email']}]
-            )
-            logger.info(f"成功发送邮件给 {recipient['email']}")
-            
-    except Exception as e:
-        logger.error(f"发送邮件通知失败: {str(e)}")
-        raise
+        logger.error(f"发送通知失败: {str(e)}")
+        return False
 
 def send_email(subject, body, recipients, is_html=False):
     """发送邮件通知"""

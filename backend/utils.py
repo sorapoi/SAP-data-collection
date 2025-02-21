@@ -15,19 +15,25 @@ async def get_materials_status(user=None):
         c.execute('SELECT COUNT(*) FROM materials WHERE 完成时间 IS NULL')
         total_incomplete = c.fetchone()[0]
         
-        # 获取财务部待处理的数量
+        # 获取财务部待处理的数量（完成时间为空且标准价格为空）
         c.execute('''
             SELECT COUNT(*) FROM materials 
             WHERE 完成时间 IS NULL 
-            AND 物料组 IN ('财务部')
+            AND (标准价格 IS NULL OR 标准价格 = '')
         ''')
         finance_incomplete = c.fetchone()[0]
         
-        # 获取运营部待处理的数量
+        # 获取运营部待处理的数量（完成时间为空且相关字段为空）
         c.execute('''
             SELECT COUNT(*) FROM materials 
             WHERE 完成时间 IS NULL 
-            AND 物料组 IN ('运营管理部')
+            AND (
+                检测时间QC IS NULL OR 检测时间QC = '' OR
+                最小批量大小PUR IS NULL OR 最小批量大小PUR = '' OR
+                舍入值PUR IS NULL OR 舍入值PUR = '' OR
+                计划交货时间PUR IS NULL OR 计划交货时间PUR = '' OR
+                MRP控制者 IS NULL OR MRP控制者 = ''
+            )
         ''')
         operation_incomplete = c.fetchone()[0]
         
