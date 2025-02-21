@@ -1388,8 +1388,7 @@ async def update_material_from_spider(
             if not exists:
                 # 构建插入数据
                 insert_data = {
-                    'material_id': material_id,
-                    '物料': processed_details.get('物料', ''),
+                    '物料': material_id,
                     '物料描述': processed_details.get('物料描述', ''),
                     '物料组': processed_details.get('物料组', ''),
                     '市场': processed_details.get('市场', ''),
