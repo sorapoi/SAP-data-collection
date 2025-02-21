@@ -13,82 +13,65 @@ logger = logging.getLogger(__name__)
 
 class DingTalkBot:
     def __init__(self):
-        # 读取配置文件
         try:
             config = toml.load('init.toml')
             self.webhook_url = config['push']['dingding']['url']
-            self.keywords = config['push']['dingding'].get('keywords', ['SAP'])  # 默认关键词
+            self.keywords = config['push']['dingding'].get('keywords', ['SAP'])
+            logger.info(f"钉钉配置加载成功: URL={self.webhook_url[:20]}..., 关键词={self.keywords}")
         except Exception as e:
-            print(f"读取配置文件失败: {str(e)}")
+            logger.error(f"读取钉钉配置失败: {str(e)}")
             self.webhook_url = None
             self.keywords = ['SAP']
 
     def send_message(self, content, msg_type="text"):
-        """
-        发送消息到钉钉机器人
-        
-        Args:
-            content: 消息内容
-            msg_type: 消息类型，支持 text、markdown 等
-        
-        Returns:
-            bool: 是否发送成功
-        """
+        """发送消息到钉钉机器人"""
         if not self.webhook_url:
-            print("未配置钉钉机器人 webhook URL")
+            logger.error("未配置钉钉机器人 webhook URL")
             return False
 
         try:
             # 确保消息包含关键词
             has_keyword = any(keyword in content for keyword in self.keywords)
             if not has_keyword:
-                # 在消息开头添加第一个关键词
-                content = f"{self.keywords[0]}通知\n{content}"
+                content = f"{self.keywords[0]}\n{content}"
+                logger.info("已添加关键词到消息内容")
 
-            # 构建请求数据
-            if msg_type == "text":
-                data = {
-                    "msgtype": "text",
-                    "text": {
-                        "content": content
-                    }
+            data = {
+                "msgtype": "markdown",
+                "markdown": {
+                    "title": "SAP系统通知",
+                    "text": content
                 }
-            elif msg_type == "markdown":
-                # 从消息内容中提取第一行作为标题
+            }
 
-                data = {
-                    "msgtype": "markdown",
-                    "markdown": {
-                        "title": f"[{self.keywords[0]}] SAP数据更新通知",  # 组合关键词和标题
-                        "text": content
-                    }
-                }
-            else:
-                print(f"不支持的消息类型: {msg_type}")
-                return False
-
+            logger.info(f"准备发送钉钉消息: URL={self.webhook_url[:20]}...")
+            
             # 发送请求
             response = requests.post(
                 self.webhook_url,
                 json=data,
-                headers={'Content-Type': 'application/json'}
+                headers={'Content-Type': 'application/json'},
+                timeout=10
             )
-
-            # 检查响应
-            if response.status_code == 200:
-                result = response.json()
-                if result.get('errcode') == 0:
-                    print(f"消息发送成功，类型: {msg_type}")
-                    return True
-                else:
-                    print(f"发送失败: {result.get('errmsg')}")
-                    return False
+            
+            response_json = response.json()
+            logger.info(f"钉钉响应: status={response.status_code}, response={response_json}")
+            
+            if response.status_code == 200 and response_json.get('errcode') == 0:
+                logger.info("钉钉消息发送成功")
+                return True
             else:
-                print(f"请求失败: {response.status_code}")
+                logger.error(f"钉钉发送失败: HTTP状态={response.status_code}, 错误信息={response_json.get('errmsg', '未知错误')}")
                 return False
 
+        except requests.exceptions.Timeout:
+            logger.error("钉钉请求超时")
+            return False
+        except requests.exceptions.RequestException as e:
+            logger.error(f"钉钉请求异常: {str(e)}")
+            return False
         except Exception as e:
-            print(f"发送消息时出错: {str(e)}")
+            logger.error(f"钉钉发送异常: {str(e)}")
             return False
 
 
