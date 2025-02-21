@@ -1394,6 +1394,7 @@ async def update_material_from_spider(
                     '基本计量单位': details.get('基本计量单位', ''),
                     '备注1': details.get('备注1', ''),
                     '备注2': details.get('备注2', ''),
+                    '生产厂商': details.get('生产厂商', ''),
                     '新建时间': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     '完成时间': None
                 }
