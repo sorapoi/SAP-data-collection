@@ -1367,11 +1367,28 @@ async def update_material_from_spider(
         material_id = material_data.get('material_id')
         details = material_data.get('details', {})
         
+        # 添加日志检查数据
+        logger.info(f"收到物料数据: material_id={material_id}")
+        logger.info(f"物料详情: {details}")
+        
         if not material_id or not details:
             raise HTTPException(status_code=400, detail="缺少必要的数据")
             
+        # 检查 details 的格式
+        if not isinstance(details, dict):
+            logger.error(f"details 格式错误: {type(details)}")
+            raise HTTPException(status_code=400, detail="物料详情格式错误")
+            
+        # 检查必要字段
+        required_fields = ['物料', '物料描述', '物料组']
+        missing_fields = [field for field in required_fields if not details.get(field)]
+        if missing_fields:
+            logger.error(f"缺少必要字段: {missing_fields}")
+            raise HTTPException(status_code=400, detail=f"缺少必要字段: {missing_fields}")
+            
         # 计算相关字段
-        processed_details = calculate_fields(details)
+        calculate_fields(details)
+        logger.info(f"处理后的数据: {details}")
         
         # 获取数据库连接
         conn = get_db_connection()
@@ -1380,23 +1397,23 @@ async def update_material_from_spider(
         try:
             # 检查物料是否存在
             cursor.execute(
-                'SELECT 物料 FROM materials WHERE material_id = %s',
-                (material_id,)
+                'SELECT 物料 FROM materials WHERE 物料 = %s',
+                (details.get('物料', ''),)
             )
             exists = cursor.fetchone()
             
             if not exists:
                 # 构建插入数据
                 insert_data = {
-                    '物料': material_id,
-                    '物料描述': processed_details.get('物料描述', ''),
-                    '物料组': processed_details.get('物料组', ''),
-                    '市场': processed_details.get('市场', ''),
-                    '基本计量单位': processed_details.get('基本计量单位', ''),
-                    '备注1': processed_details.get('备注1', ''),
-                    '备注2': processed_details.get('备注2', ''),
-                    '生产厂商': processed_details.get('生产厂商', ''),
-                    '当前部门': processed_details.get('当前部门', ''),
+                    '物料': details.get('物料', ''),
+                    '物料描述': details.get('物料描述', ''),
+                    '物料组': details.get('物料组', ''),
+                    '市场': details.get('市场', ''),
+                    '基本计量单位': details.get('基本计量单位', ''),
+                    '备注1': details.get('备注1', ''),
+                    '备注2': details.get('备注2', ''),
+                    '生产厂商': details.get('生产厂商', ''),
+                    '当前部门': details.get('当前部门', ''),
                     '新建时间': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     '完成时间': None
                 }
@@ -1410,10 +1427,10 @@ async def update_material_from_spider(
                 cursor.execute(sql, list(insert_data.values()))
                 conn.commit()
                 
-                logger.info(f"新增物料: {material_id}")
+                logger.info(f"新增物料: {details.get('物料', '')}")
                 return {"message": "物料信息已添加", "action": "insert"}
             else:
-                logger.info(f"物料已存在: {material_id}")
+                logger.info(f"物料已存在: {details.get('物料', '')}")
                 return {"message": "物料已存在", "action": "skip"}
                 
         finally:
