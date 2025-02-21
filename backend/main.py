@@ -1362,13 +1362,14 @@ async def update_material_from_spider(
     material_data: dict,
     user = Depends(authenticate_user)
 ):
-    """
-    接收并更新物料详细信息
-    """
+    """接收并更新物料详细信息"""
     try:
         material_id = material_data.get('material_id')
         details = material_data.get('details', {})
         
+        if not material_id or not details:
+            raise HTTPException(status_code=400, detail="缺少必要的数据")
+            
         # 计算相关字段
         processed_details = calculate_fields(details)
         
@@ -1376,41 +1377,49 @@ async def update_material_from_spider(
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # 检查物料是否存在
-        cursor.execute(
-            'SELECT 物料 FROM materials WHERE 物料 = %s',
-            (processed_details.get('物料', ''),)
-        )
-        exists = cursor.fetchone()
-        
-        if not exists:
-            # 构建插入数据
-            insert_data = {
-                '物料': processed_details.get('物料', ''),
-                '物料描述': processed_details.get('物料描述', ''),
-                '物料组': processed_details.get('物料组', ''),
-                '市场': processed_details.get('市场', ''),
-                '基本计量单位': processed_details.get('基本计量单位', ''),
-                '备注1': processed_details.get('备注1', ''),
-                '备注2': processed_details.get('备注2', ''),
-                '生产厂商': processed_details.get('生产厂商', ''),
-                '当前部门': processed_details.get('当前部门', ''),
-                '新建时间': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                '完成时间': None
-            }
+        try:
+            # 检查物料是否存在
+            cursor.execute(
+                'SELECT 物料 FROM materials WHERE material_id = %s',
+                (material_id,)
+            )
+            exists = cursor.fetchone()
             
-            # 构建 SQL 语句
-            fields = ', '.join(insert_data.keys())
-            placeholders = ', '.join(['%s'] * len(insert_data))
-            sql = f'INSERT INTO materials ({fields}) VALUES ({placeholders})'
-            
-            # 执行插入
-            cursor.execute(sql, list(insert_data.values()))
-            conn.commit()
-            
-            return {"message": "物料信息已添加", "action": "insert"}
-        else:
-            return {"message": "物料已存在", "action": "skip"}
+            if not exists:
+                # 构建插入数据
+                insert_data = {
+                    'material_id': material_id,
+                    '物料': processed_details.get('物料', ''),
+                    '物料描述': processed_details.get('物料描述', ''),
+                    '物料组': processed_details.get('物料组', ''),
+                    '市场': processed_details.get('市场', ''),
+                    '基本计量单位': processed_details.get('基本计量单位', ''),
+                    '备注1': processed_details.get('备注1', ''),
+                    '备注2': processed_details.get('备注2', ''),
+                    '生产厂商': processed_details.get('生产厂商', ''),
+                    '当前部门': processed_details.get('当前部门', ''),
+                    '新建时间': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    '完成时间': None
+                }
+                
+                # 构建 SQL 语句
+                fields = ', '.join(insert_data.keys())
+                placeholders = ', '.join(['%s'] * len(insert_data))
+                sql = f'INSERT INTO materials ({fields}) VALUES ({placeholders})'
+                
+                # 执行插入
+                cursor.execute(sql, list(insert_data.values()))
+                conn.commit()
+                
+                logger.info(f"新增物料: {material_id}")
+                return {"message": "物料信息已添加", "action": "insert"}
+            else:
+                logger.info(f"物料已存在: {material_id}")
+                return {"message": "物料已存在", "action": "skip"}
+                
+        finally:
+            cursor.close()
+            conn.close()
             
     except Exception as e:
         logger.error(f"更新物料信息失败: {str(e)}")
