@@ -1,4 +1,4 @@
-from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from datetime import datetime
 import toml
@@ -15,13 +15,32 @@ def is_holiday():
     """检查今天是否是节假日"""
     try:
         # 使用第三方API检查是否为节假日
-        # 这里使用 timor.tech 的免费API
-        today = datetime.now().strftime('%Y%m%d')
-        response = requests.get(f'http://timor.tech/api/holiday/info/{today}')
+        today = datetime.now().strftime('%Y-%m-%d')
+        response = requests.get(
+            f'http://timor.tech/api/holiday/info/{today}',
+            timeout=5,  # 添加超时设置
+            headers={
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+        )
+        
+        if response.status_code != 200:
+            logger.error(f"节假日API返回错误: HTTP {response.status_code}")
+            return False
+            
         data = response.json()
-        return data['type']['type'] in [1, 2]  # 1=周末, 2=节假日
+        logger.info(f"节假日API响应: {data}")
+        
+        return data.get('type', {}).get('type') in [1, 2]  # 1=周末, 2=节假日
+        
+    except requests.exceptions.RequestException as e:
+        logger.error(f"请求节假日API失败: {str(e)}")
+        return False
+    except ValueError as e:
+        logger.error(f"解析节假日API响应失败: {str(e)}")
+        return False
     except Exception as e:
-        logger.error(f"检查节假日失败: {str(e)}")
+        logger.error(f"检查节假日时出错: {str(e)}")
         return False
 
 async def send_daily_notification():
@@ -39,7 +58,7 @@ async def send_daily_notification():
             return
 
         # 获取物料状态统计
-        status_info = await get_materials_status(None)  # 这里传入None因为是系统自动调用
+        status_info = await get_materials_status(None)
         
         # 获取邮件接收者列表
         email_recipients = await get_email_recipients()
@@ -74,7 +93,8 @@ def init_scheduler():
         if _scheduler:
             _scheduler.shutdown()
             
-        _scheduler = BackgroundScheduler()
+        # 使用异步调度器
+        _scheduler = AsyncIOScheduler()
         
         # 读取配置文件获取推送时间
         config = toml.load('init.toml')

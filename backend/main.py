@@ -628,12 +628,11 @@ async def update_calculated_fields(
         # 构建更新语句
         update_fields = ', '.join([f"{k} = %s" for k in calculated_fields.keys()])
         query = f'UPDATE materials SET {update_fields} WHERE 物料 = %s'
+        # 打印执行的sql语句
+        print(query, list(calculated_fields.values()) + [material_id])
         
         # 执行更新
         c.execute(query, list(calculated_fields.values()) + [material_id])
-        if c.rowcount == 0:
-            conn.close()
-            raise HTTPException(status_code=404, detail="物料不存在")
         
         conn.commit()
         conn.close()
@@ -987,7 +986,7 @@ async def api_complete_materials(request: CompleteRequest):
             notify_material_complete(
                 completed_count=len(request.material_ids),  # 完成的数量
                 user_info={
-                    'username': request.api_key,
+                    'username': 'API',
                     'department': '信息部'
                 }
             )
