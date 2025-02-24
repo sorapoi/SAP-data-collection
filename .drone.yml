@@ -26,9 +26,9 @@ steps:
         from_secret: ssh_password
       port: 22
       script:
-        - cd /home/docker/materials
+        - cmkdir -p /app/materials/data
         - docker-compose pull
-        - docker-compose up -d
+        - docker-compose up -d --build
 
 trigger:
   branch:
