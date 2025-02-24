@@ -1,0 +1,48 @@
+kind: pipeline
+type: docker
+name: materials-pipeline
+
+steps:
+  - name: build-backend
+    image: plugins/docker
+    settings:
+      dockerfile: backend/Dockerfile
+      context: backend
+      registry: home.dandan.autos:6000
+      repo: home.dandan.autos:6000/materials-backend
+      tags:
+        - latest
+        - ${DRONE_COMMIT_SHA:0:8}
+
+  - name: deploy
+    image: appleboy/drone-ssh
+    settings:
+      host: ssh_host
+      username: 
+        from_secret: ssh_username
+      password:
+        from_secret: ssh_password
+      port: 22
+      script:
+        - cd /home/docker/materials
+        - docker-compose pull
+        - docker-compose up -d
+
+trigger:
+  branch:
+    - main
+  event:
+    - push
+    - tag
+
+services:
+  - name: docker
+    image: docker:dind
+    privileged: true
+    volumes:
+      - name: dockersock
+        path: /var/run
+
+volumes:
+  - name: dockersock
+    temp: {}
