@@ -8,8 +8,8 @@ steps:
     settings:
       dockerfile: backend/Dockerfile
       context: backend
-      registry: home.dandan.autos:6000
-      repo: home.dandan.autos:6000/materials-backend
+      registry: http://home.dandan.autos:6000
+      repo: http://home.dandan.autos:6000/materials-backend
       tags:
         - latest
         - ${DRONE_COMMIT_SHA:0:8}
