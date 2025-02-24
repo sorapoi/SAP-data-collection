@@ -8,8 +8,9 @@ steps:
     settings:
       dockerfile: backend/Dockerfile
       context: backend
-      registry: http://192.168.3.5:6000
+      registry: 192.168.3.5:6000
       repo: 192.168.3.5:6000/materials-backend
+      insecure: true
       tags:
         - latest
         - ${DRONE_COMMIT_SHA:0:8}
