@@ -9,7 +9,7 @@ steps:
       dockerfile: backend/Dockerfile
       context: backend
       registry: http://home.dandan.autos:6000
-      repo: http://home.dandan.autos:6000/materials-backend
+      repo: home.dandan.autos:6000/materials-backend
       tags:
         - latest
         - ${DRONE_COMMIT_SHA:0:8}
