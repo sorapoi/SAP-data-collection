@@ -800,7 +800,11 @@ const loadTableData = async () => {
       params: {
         page: currentPage.value,
         page_size: pageSize.value,
-        show_completed: showCompleted.value
+        show_completed: showCompleted.value,
+        // 添加搜索参数
+        物料: searchForm.value.物料 || undefined,
+        物料描述: searchForm.value.物料描述 || undefined,
+        物料组: searchForm.value.物料组 || undefined
       }
     })
     
@@ -1377,7 +1381,7 @@ const debounce = (fn: Function, delay: number) => {
 // 处理搜索
 const handleSearch = debounce(async () => {
   currentPage.value = 1  // 重置页码
-  await loadTableData()
+  await loadTableData()  // 重新加载数据
 }, 300)
 
 // 新用户表单状态
