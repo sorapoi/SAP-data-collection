@@ -820,7 +820,7 @@ const loadTableData = async () => {
 // 导出Excel
 const exportToExcel = async () => {
   try {
-    // 根据部门获取可见字段 
+    // 根据部门获取可见字段  
     const visibleFields = computed(() => {
       const baseFields = ['物料', '物料描述', '物料组', '市场', '备注1', '备注2', '生产厂商', '基本计量单位']
       const financeFields = [
