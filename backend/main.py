@@ -53,7 +53,8 @@ class Material(BaseModel):
     物料描述: str | None = None
     物料组: str | None = None
     市场: str | None = None
-    基本计量单位: str | None = None  # 添加基本计量单位字段
+    基本计量单位: str | None = None
+    工厂: str | None = None
     备注1: str | None = None
     备注2: str | None = None
     生产厂商: str | None = None
@@ -184,7 +185,8 @@ def init_db():
             物料描述 TEXT,
             物料组 VARCHAR(50),
             市场 VARCHAR(50),
-            基本计量单位 VARCHAR(10),  # 添加基本计量单位字段
+            基本计量单位 VARCHAR(10),
+            工厂 VARCHAR(50),
             备注1 TEXT,
             备注2 TEXT,
             生产厂商 TEXT,
@@ -392,13 +394,16 @@ async def save_materials(materials: List[Material], user = Depends(authenticate_
 # 获取物料数据
 @app.get("/materials")
 async def get_materials(
-    user = Depends(authenticate_user),
+    request: Request,
+    user: dict | None = Depends(lambda: None),  # 修改为可选参数，默认为 None
     page: int = 1,
     page_size: int = 15,
     show_completed: bool = False,
     物料: str = None,
     物料描述: str = None,
-    物料组: str = None
+    物料组: str = None,
+    工厂: str = None,
+    游客姓名: str = None  # 添加游客姓名参数
 ):
     conn = get_db_connection()
     c = conn.cursor()
@@ -419,10 +424,24 @@ async def get_materials(
         if 物料组:
             where_conditions.append("物料组 LIKE %s")
             where_params.append(f"%{物料组}%")
+            
+        if 工厂:
+            where_conditions.append("工厂 = %s")
+            where_params.append(工厂)
+            
+        # 游客只能查看备注1等于游客姓名的物料
+        if not user and 游客姓名:
+            where_conditions.append("备注1 = %s")
+            where_params.append(游客姓名)
         
-        # 采购部不显示物料编号首位为4和5的记录
-        if user["department"] == "采购部":
-            where_conditions.append("物料 NOT LIKE '4%' AND 物料 NOT LIKE '5%'")
+        # 根据部门添加工厂筛选
+        if user:  # 已登录用户
+            if user["department"] == "制剂财务部":
+                where_conditions.append("工厂 = '5000'")
+            elif user["department"] in ["制药科技财务部", "制药科技制造部"]:
+                where_conditions.append("工厂 = '5300'")
+            elif user["department"] == "采购部":
+                where_conditions.append("物料 NOT LIKE '4%' AND 物料 NOT LIKE '5%'")
         
         # 只有在勾选时才显示已完成物料
         if not show_completed:
@@ -440,14 +459,20 @@ async def get_materials(
         offset = (page - 1) * page_size
         
         # 根据部门筛选可见字段
-        if user["department"] == "信息部":
+        if not user:  # 游客视图
+            fields = '''
+                物料, 物料描述, 物料组, 市场, 备注1, 备注2, 生产厂商, 基本计量单位,
+                标准价格, MRP控制者, 最小批量大小PUR, 舍入值PUR, 计划交货时间PUR,
+                检测时间QC, 完成时间, 工厂
+            '''
+        elif user["department"] == "信息部":
             fields = "*"
-        elif user["department"] == "财务部":
+        elif user["department"] in ["制剂财务部", "制药科技财务部"]:
             fields = '''
                 id, 物料, 物料描述, 物料组, 市场, 备注1, 备注2, 生产厂商, 基本计量单位,
                 评估分类, 销售订单库存, 价格确定, 价格控制, 标准价格, 价格单位,
                 用QS的成本核算, 物料来源, 差异码, 物料状态, 成本核算批量,
-                新建时间, 完成时间
+                新建时间, 完成时间, 工厂
             '''
         else:
             fields = '''
@@ -457,7 +482,7 @@ async def get_materials(
                 安全库存, 批量大小, 舍入值, 采购类型, 收货处理时间,
                 计划交货时间, MRP区域, 反冲, 批量输入, 自制生产时间,
                 策略组, 综合MRP, 消耗模式, 向后跨期期间, 向后跨期时间,
-                独立集中, 计划时间界, 生产评估, 生产计划, 新建时间, 完成时间
+                独立集中, 计划时间界, 生产评估, 生产计划, 新建时间, 完成时间, 工厂
             '''
         
         # 构建完整的 SQL 查询，包含 WHERE 子句和排序
@@ -481,7 +506,8 @@ async def get_materials(
             "items": result,
             "page": page,
             "page_size": page_size,
-            "total_pages": (total + page_size - 1) // page_size
+            "total_pages": (total + page_size - 1) // page_size,
+            "is_guest": not user  # 添加标识是否为游客的字段
         }
         
     except Exception as e:
@@ -504,7 +530,9 @@ async def update_material(
         '运营管理部': ['MRP控制者', '最小批量大小PUR', '舍入值PUR', '计划交货时间PUR', '检测时间QC'],  # 运营管理部可以修改采购部字段
         '采购部': ['最小批量大小PUR', '舍入值PUR', '计划交货时间PUR'],
         'QC检测室': ['检测时间QC'],
-        '财务部': ['评估分类', '销售订单库存', '价格确定', '价格控制', '标准价格', 
+        '制剂财务部': ['评估分类', '销售订单库存', '价格确定', '价格控制', '标准价格', 
+                '价格单位', '用QS的成本核算', '物料来源', '差异码', '物料状态', '成本核算批量'],
+        '制药科技财务部': ['评估分类', '销售订单库存', '价格确定', '价格控制', '标准价格', 
                 '价格单位', '用QS的成本核算', '物料来源', '差异码', '物料状态', '成本核算批量']
     }
     
@@ -514,6 +542,20 @@ async def update_material(
     try:
         conn = get_db_connection()
         c = conn.cursor()
+        
+        # 检查物料是否存在并获取工厂信息
+        c.execute('SELECT 工厂 FROM materials WHERE 物料 = %s', (material_id,))
+        result = c.fetchone()
+        if not result:
+            raise HTTPException(status_code=404, detail="物料不存在")
+            
+        工厂 = result[0]
+        
+        # 检查工厂权限
+        if user["department"] == "制剂财务部" and 工厂 != "5000":
+            raise HTTPException(status_code=403, detail="无权修改该工厂的物料")
+        elif user["department"] == "制药科技财务部" and 工厂 != "5300":
+            raise HTTPException(status_code=403, detail="无权修改该工厂的物料")
         
         # 获取旧值
         c.execute(f'SELECT {update_data.field} FROM materials WHERE 物料 = %s', (material_id,))
@@ -529,7 +571,7 @@ async def update_material(
         
         conn.commit()
         
-        # 记录操作日志，各个值的来源如下：
+        # 记录操作日志
         await log_operation(
             request=request,  # 用于获取客户端IP和主机名
             user=user,        # 从 JWT token 中获取用户名和部门
@@ -561,7 +603,7 @@ async def get_export_materials(user = Depends(authenticate_user)):
         c = conn.cursor()
         
         # 获取所有需要的字段都已填写但完成时间为空的数据
-        c.execute('''
+        query = '''
             SELECT * FROM materials 
             WHERE 检测时间QC IS NOT NULL 
             AND 检测时间QC != ''
@@ -576,7 +618,15 @@ async def get_export_materials(user = Depends(authenticate_user)):
             AND 标准价格 IS NOT NULL
             AND 标准价格 != ''
             AND (完成时间 IS NULL OR 完成时间 = '')
-        ''')
+        '''
+        
+        # 添加工厂筛选
+        if user["department"] == "制剂财务部":
+            query += " AND 工厂 = '5000'"
+        elif user["department"] == "制药科技财务部":
+            query += " AND 工厂 = '5300'"
+        
+        c.execute(query)
         
         columns = [description[0] for description in c.description]
         result = [dict(zip(columns, row)) for row in c.fetchall()]
@@ -873,6 +923,7 @@ async def api_export_materials(api_auth: APIAuth):
                 物料组,
                 市场,
                 基本计量单位,
+                工厂,
                 备注1,
                 备注2,
                 生产厂商,
@@ -1380,8 +1431,9 @@ async def update_material_from_spider(
             '物料描述': details.get('物料描述', ''),
             '物料组': details.get('物料组', ''),
             '市场': details.get('市场', ''),
+            '工厂': details.get('工厂', ''),
             '标准价格': details.get('标准价格', ''),
-            '检测时间QC': details.get('检测时间QC', ''),
+            '检测时间QC': details.get('检测时间', ''),
             '基本计量单位': details.get('基本计量单位', ''),
             '备注1': details.get('备注1', ''),
             '备注2': details.get('备注2', ''),

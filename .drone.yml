@@ -27,6 +27,7 @@ steps:
       port: 22
       script:
         - mkdir -p /app/materials/data
+        - cd /home/docker/materials
         - docker-compose pull
         - docker-compose up -d --build
 

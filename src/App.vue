@@ -25,7 +25,30 @@
         <h2>用户登录</h2>
         <input v-model="loginForm.username" placeholder="用户名" type="text">
         <input v-model="loginForm.password" placeholder="密码" type="password">
-        <button @click="handleLogin">登录</button>
+        <div class="login-buttons">
+          <button @click="handleLogin">登录</button>
+          <button @click="showGuestDialog = true" class="guest-button">游客浏览</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 游客登录对话框 -->
+    <div v-if="showGuestDialog" class="modal">
+      <div class="modal-content guest-dialog">
+        <h2>游客访问</h2>
+        <div class="form-group">
+          <label>申请人</label>
+          <input 
+            type="text" 
+            v-model="guestForm.applicant" 
+            placeholder="请输入申请人姓名"
+            @keyup.enter="handleGuestLogin"
+          >
+        </div>
+        <div class="modal-buttons">
+          <button @click="handleGuestLogin">确认</button>
+          <button @click="showGuestDialog = false">取消</button>
+        </div>
       </div>
     </div>
 
@@ -37,9 +60,9 @@
           <span class="separator">:</span>
           <span class="department">{{ department }}</span>
         </div>
-        <button @click="openSettings" class="settings-button">设置</button>
-        <button @click="openEmailSettings">设置邮箱</button>
-        <button @click="openChangePasswordModal">修改密码</button>
+        <button v-if="!isGuest" @click="openSettings" class="settings-button">设置</button>
+        <button v-if="!isGuest" @click="openEmailSettings">设置邮箱</button>
+        <button v-if="!isGuest" @click="openChangePasswordModal">修改密码</button>
         <button v-if="department === '信息部'" @click="openUserManagement">用户管理</button>
         <button v-if="department === '信息部'" @click="openSystemSettings">系统设置</button>
         <button v-if="department === '信息部'" @click="sendStatusNotification">推送统计</button>
@@ -49,7 +72,7 @@
             <input type="file" @change="handleFileUpload" accept=".xlsx,.xls">
             <span>选择文件</span>
           </label>
-          <button v-if="canExport" @click="exportToExcel">导出Excel</button>
+          <button v-if="canExport && !isGuest" @click="exportToExcel">导出Excel</button>
         </div>
       </div>
 
@@ -81,6 +104,17 @@
               v-model="searchForm.物料组"
               placeholder="搜索物料组"
               @input="handleSearch"
+            >
+          </div>
+          <div class="search-item">
+            <label>工厂</label>
+            <input 
+              type="text" 
+              v-model="searchForm.工厂"
+              placeholder="搜索工厂"
+              @input="handleSearch"
+              :disabled="department === '制剂财务部' || department === '制药科技财务部'"
+              :title="(department === '制剂财务部' || department === '制药科技财务部') ? '财务部门只能查看指定工厂的物料' : ''"
             >
           </div>
         </div>
@@ -122,6 +156,21 @@
                          :title="row[header]">
                       {{ row[header] }}
                     </div>
+                    <template v-else-if="header === '财务状态'">
+                      <span :style="getStatusStyle(getFinanceStatus(row))">
+                        {{ getFinanceStatus(row) }}
+                      </span>
+                    </template>
+                    <template v-else-if="header === 'MRP状态'">
+                      <span :style="getStatusStyle(getMRPStatus(row))">
+                        {{ getMRPStatus(row) }}
+                      </span>
+                    </template>
+                    <template v-else-if="header === '完成状态'">
+                      <span :style="getStatusStyle(getCompletionStatus(row))">
+                        {{ getCompletionStatus(row) }}
+                      </span>
+                    </template>
                     <template v-else>
                       {{ row[header] }}
                     </template>
@@ -216,7 +265,9 @@
               <option value="采购部">采购部</option>
               <option value="信息部">信息部</option>
               <option value="QC检测室">QC检测室</option>
-              <option value="财务部">财务部</option>
+              <option value="制剂财务部">制剂财务部</option>
+              <option value="制药科技财务部">制药科技财务部</option>
+              <option value="制药科技制造部">制药科技制造部</option>
             </select>
           </div>
           <div class="form-group">
@@ -379,8 +430,10 @@
 import { ref, computed, onMounted } from 'vue'
 import * as XLSX from 'xlsx'
 import axios from 'axios'
+import { debounce as _debounce } from 'lodash-es'  // 使用as关键字重命名导入
 
 interface MaterialRow {
+  '工厂': string;
   '物料': string;
   '物料描述': string;
   '物料组': string;
@@ -431,6 +484,17 @@ interface MaterialRow {
   [key: string]: string;
 }
 
+interface SearchParams {
+  page: number;
+  page_size: number;
+  物料?: string;
+  物料描述?: string;
+  物料组?: string;
+  工厂?: string;
+  show_completed: boolean;
+  游客姓名?: string;
+}
+
 // 分页相关的状态
 const currentPage = ref(1)
 const pageSize = ref(15)  // 恢复这个定义
@@ -439,7 +503,7 @@ const totalItems = ref(0)
 const tableData = ref<MaterialRow[]>([])
 const headers = computed(() => {
   const baseHeaders = [
-    '物料', '物料描述', '物料组', '市场', '备注1', '备注2', '生产厂商', '基本计量单位'
+    '工厂', '物料', '物料描述', '物料组', '市场', '备注1', '备注2', '生产厂商', '基本计量单位'
   ]
   
   const financeHeaders = [
@@ -447,7 +511,7 @@ const headers = computed(() => {
     '用QS的成本核算', '物料来源', '差异码', '物料状态', '成本核算批量'
   ]
   
-  const timeHeaders = ['新建时间', '完成时间']  // 添加时间相关列
+  const timeHeaders = ['新建时间', '完成时间']
   
   const otherHeaders = [
     '检测时间QC', '最小批量大小PUR', '舍入值PUR', '计划交货时间PUR',
@@ -457,11 +521,21 @@ const headers = computed(() => {
     '策略组', '综合MRP', '消耗模式', '向后跨期期间', '向后跨期时间', 
     '独立集中', '计划时间界', '生产评估', '生产计划'
   ]
+
+  // 游客视图列
+  const guestHeaders = [
+    ...baseHeaders,
+    '财务完成状态',
+    'MRP完成状态',
+    '完成状态'
+  ]
   
   // 根据部门返回不同的列
-  if (department.value === '信息部') {
+  if (department.value === '游客') {
+    return guestHeaders
+  } else if (department.value === '信息部') {
     return [...baseHeaders, ...financeHeaders, ...otherHeaders, ...timeHeaders]
-  } else if (department.value === '财务部') {
+  } else if (department.value === '制剂财务部' || department.value === '制药科技财务部') {
     return [...baseHeaders, ...financeHeaders, ...timeHeaders]
   }
   return [...baseHeaders, ...otherHeaders, ...timeHeaders]
@@ -489,9 +563,16 @@ const mrpControllers = [
 const isLoggedIn = ref(false)
 const username = ref('')
 const department = ref('')
+const isGuest = ref(false)  // 添加游客标识
 const loginForm = ref({
   username: '',
   password: ''
+})
+
+// 游客相关状态
+const showGuestDialog = ref(false)
+const guestForm = ref({
+  applicant: ''
 })
 
 // 修改密码相关状态
@@ -519,7 +600,8 @@ const getEditableColumns = computed(() => {
       return ['最小批量大小PUR', '舍入值PUR', '计划交货时间PUR']
     case 'QC检测室':
       return ['检测时间QC']
-    case '财务部':
+    case '制剂财务部':
+    case '制药科技财务部':
       return ['评估分类', '销售订单库存', '价格确定', '价格控制', '标准价格', 
               '价格单位', '用QS的成本核算', '物料来源', '差异码', '物料状态', '成本核算批量']
     default:
@@ -542,6 +624,15 @@ const handleLogin = async () => {
     isLoggedIn.value = true
     department.value = response.data.department
     username.value = loginForm.value.username  // 添加这行，保存用户名
+    
+    // 设置工厂筛选
+    if (department.value === '制剂财务部') {
+      searchForm.value.工厂 = '5000'
+    } else if (department.value === '制药科技财务部' || department.value === '制药科技制造部') {
+      searchForm.value.工厂 = '5300'
+    } else {
+      searchForm.value.工厂 = ''
+    }
     
     // 设置用户配置
     if (response.data.settings) {
@@ -625,10 +716,12 @@ const handleChangePassword = async () => {
 
 // 退出登录
 const handleLogout = () => {
-  localStorage.removeItem('token')
   isLoggedIn.value = false
+  isGuest.value = false  // 重置游客状态
   username.value = ''
   department.value = ''
+  localStorage.removeItem('token')
+  // 重置其他状态...
 }
 
 // 获取输入框提示文本
@@ -760,6 +853,7 @@ const handleFileUpload = async (event: Event) => {
         差异码: row.差异码?.trim() || null,
         物料状态: row.物料状态?.trim() || null,
         成本核算批量: row.成本核算批量?.trim() || null,
+        工厂: row.工厂?.trim() || null,
       }))
 
     if (processedData.length === 0) {
@@ -796,19 +890,29 @@ const handleFileUpload = async (event: Event) => {
 const loadTableData = async () => {
   try {
     const response = await axios.get(`${API_BASE_URL}/materials`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+      headers: department.value === '游客' ? {} : { Authorization: `Bearer ${localStorage.getItem('token')}` },
       params: {
         page: currentPage.value,
         page_size: pageSize.value,
         show_completed: showCompleted.value,
-        // 添加搜索参数
         物料: searchForm.value.物料 || undefined,
         物料描述: searchForm.value.物料描述 || undefined,
-        物料组: searchForm.value.物料组 || undefined
+        物料组: searchForm.value.物料组 || undefined,
+        工厂: searchForm.value.工厂 || undefined
       }
     })
     
-    tableData.value = response.data.items
+    let data = response.data.items
+    
+    // 如果是游客，添加状态计算
+    if (department.value === '游客') {
+      data = data.map((row: MaterialRow) => ({
+        ...row,
+        ...calculateGuestStatus(row)
+      }))
+    }
+    
+    tableData.value = data
     totalItems.value = response.data.total
     totalPages.value = response.data.total_pages
     currentPage.value = response.data.page
@@ -822,7 +926,7 @@ const exportToExcel = async () => {
   try {
     // 根据部门获取可见字段  
     const visibleFields = computed(() => {
-      const baseFields = ['物料', '物料描述', '物料组', '市场', '备注1', '备注2', '生产厂商', '基本计量单位']
+      const baseFields = ['工厂', '物料', '物料描述', '物料组', '市场', '备注1', '备注2', '生产厂商', '基本计量单位']
       const financeFields = [
         '评估分类', '销售订单库存', '价格确定', '价格控制', '标准价格', '价格单位',
         '用QS的成本核算', '物料来源', '差异码', '物料状态', '成本核算批量'
@@ -839,7 +943,8 @@ const exportToExcel = async () => {
       switch (department.value) {
         case '信息部':
           return [...baseFields, ...financeFields, ...otherFields]
-        case '财务部':
+        case '制剂财务部':
+        case '制药科技财务部':
           return [...baseFields, ...financeFields]
         case '采购部':
           return [...baseFields, '最小批量大小PUR', '舍入值PUR', '计划交货时间PUR']
@@ -1024,6 +1129,15 @@ const checkLoginStatus = async () => {
       department.value = tokenData.department
       isLoggedIn.value = true
       
+      // 设置工厂筛选
+      if (department.value === '制剂财务部') {
+        searchForm.value.工厂 = '5000'
+      } else if (department.value === '制药科技财务部' || department.value === '制药科技制造部') {
+        searchForm.value.工厂 = '5300'
+      } else {
+        searchForm.value.工厂 = ''
+      }
+      
       // 移除这里的 loadTableData 调用
     } catch (error) {
       localStorage.removeItem('token')
@@ -1047,6 +1161,15 @@ onMounted(async () => {
       username.value = tokenData.username
       department.value = tokenData.department
       isLoggedIn.value = true
+      
+      // 设置工厂筛选
+      if (department.value === '制剂财务部') {
+        searchForm.value.工厂 = '5000'
+      } else if (department.value === '制药科技财务部' || department.value === '制药科技制造部') {
+        searchForm.value.工厂 = '5300'
+      } else {
+        searchForm.value.工厂 = ''
+      }
       
       // 从后端获取最新的用户设置
       const response = await axios.get(`${API_BASE_URL}/user/settings`, {
@@ -1087,8 +1210,22 @@ const checkAndCalculate = (row: MaterialRow) => {
 
 // 计算字段值
 const calculateFields = (row: MaterialRow) => {
-  const firstChar = row.物料?.[0]
+  // 确保row.物料存在
+  if (!row.物料) {
+    return
+  }
   
+  const firstChar = row.物料[0]
+  
+  // MRP区域计算
+  if (row.工厂 === '5000') {
+    row.MRP区域 = '5000-1'
+  } else if (row.工厂 === '5300') {
+    row.MRP区域 = '5300-1'
+  } else {
+    row.MRP区域 = ''
+  }
+
   // MRP类型计算
   if (firstChar === '4' && row.市场 === '中国') {
     row.MRP类型 = 'ND'
@@ -1139,9 +1276,6 @@ const calculateFields = (row: MaterialRow) => {
 
   // 计划交货时间计算
   row.计划交货时间 = ['4', '5'].includes(firstChar) ? 'NA' : row.计划交货时间PUR
-
-  // MRP区域计算
-  row.MRP区域 = row.物料 ? '5000-1' : ''
 
   // 反冲计算
   if (firstChar === '1') {
@@ -1308,6 +1442,14 @@ const handleSettingsChange = async () => {
     
     // 重新加载数据
     currentPage.value = 1
+    
+    // 确保工厂筛选不会被重置
+    if (department.value === '制剂财务部') {
+      searchForm.value.工厂 = '5000'
+    } else if (department.value === '制药科技财务部' || department.value === '制药科技制造部') {
+      searchForm.value.工厂 = '5300'
+    }
+    
     await loadTableData()
   } catch (error) {
     console.error('保存设置失败:', error)
@@ -1363,11 +1505,12 @@ const user = ref<{
 const searchForm = ref({
   物料: '',
   物料描述: '',
-  物料组: ''
+  物料组: '',
+  工厂: ''  // 添加工厂字段
 })
 
 // 添加防抖函数
-const debounce = (fn: Function, delay: number) => {
+const _debounce = (fn: Function, delay: number) => {
   let timer: number | null = null
   return (...args: any[]) => {
     if (timer) clearTimeout(timer)
@@ -1378,11 +1521,46 @@ const debounce = (fn: Function, delay: number) => {
   }
 }
 
-// 处理搜索
-const handleSearch = debounce(async () => {
-  currentPage.value = 1  // 重置页码
-  await loadTableData()  // 重新加载数据
-}, 300)
+// 搜索处理函数
+const handleSearch = _debounce(async () => {
+  try {
+    // 重置到第一页
+    currentPage.value = 1
+    
+    // 构建搜索参数
+    const params: SearchParams = {
+      page: currentPage.value,
+      page_size: pageSize.value,
+      物料: searchForm.value.物料 || undefined,
+      物料描述: searchForm.value.物料描述 || undefined,
+      物料组: searchForm.value.物料组 || undefined,
+      工厂: searchForm.value.工厂 || undefined,
+      show_completed: showCompleted.value
+    }
+    
+    // 如果是游客，添加游客姓名参数
+    if (isGuest.value) {
+      params.游客姓名 = username.value
+    }
+    
+    // 发送请求
+    const response = await axios.get(`${API_BASE_URL}/materials`, {
+      params: params,
+      headers: isGuest.value ? {} : {
+        Authorization: `Bearer ${localStorage.getItem('token')}`
+      }
+    })
+    
+    // 更新表格数据
+    tableData.value = response.data.items
+    totalItems.value = response.data.total
+    totalPages.value = response.data.total_pages
+    
+  } catch (error) {
+    console.error('搜索失败:', error)
+    alert('搜索失败，请重试')
+  }
+}, 300)  // 300ms的防抖延迟
 
 // 新用户表单状态
 const newUser = ref({
@@ -1660,6 +1838,99 @@ const importSettings = async (event: Event) => {
   
   // 清空文件输入
   input.value = ''
+}
+
+// 添加工厂筛选逻辑
+const getFactoryFilter = computed(() => {
+  switch (department.value) {
+    case '制剂财务部':
+      return '5000'
+    case '制药科技财务部':
+    case '制药科技制造部':
+      return '5300'
+    default:
+      return ''
+  }
+})
+
+// 处理游客登录
+const handleGuestLogin = async () => {
+  if (!guestForm.value.applicant) {
+    alert('请输入申请人姓名')
+    return
+  }
+  
+  try {
+    // 设置游客默认显示15条记录
+    pageSize.value = 15
+    currentPage.value = 1
+    
+    const response = await axios.get(`${API_BASE_URL}/materials`, {
+      params: {
+        游客姓名: guestForm.value.applicant,
+        page: currentPage.value,
+        page_size: pageSize.value
+      }
+    })
+    
+    if (response.data.items.length > 0) {
+      isLoggedIn.value = true
+      isGuest.value = true  // 设置游客标识
+      username.value = guestForm.value.applicant
+      department.value = '游客'
+      showGuestDialog.value = false
+      
+      // 更新表格数据
+      tableData.value = response.data.items
+      totalItems.value = response.data.total
+      totalPages.value = response.data.total_pages
+    } else {
+      alert('没有找到相关物料信息')
+    }
+  } catch (error) {
+    console.error('游客登录失败:', error)
+    alert('游客登录失败')
+  }
+}
+
+// 计算财务状态
+const getFinanceStatus = (row: MaterialRow) => {
+  return row.标准价格 ? '已完成' : '未完成'
+}
+
+// 计算MRP状态
+const getMRPStatus = (row: MaterialRow) => {
+  const requiredFields = [
+    row.MRP控制者,
+    row.最小批量大小PUR,
+    row.舍入值PUR,
+    row.计划交货时间PUR,
+    row.检测时间QC
+  ]
+  return requiredFields.every(field => field?.trim()) ? '已完成' : '未完成'
+}
+
+// 计算完成状态
+const getCompletionStatus = (row: MaterialRow) => {
+  return row.完成时间 ? '已完成' : '未完成'
+}
+
+// 获取状态单元格的样式
+const getStatusStyle = (status: string) => {
+  return {
+    color: status === '已完成' ? '#4CAF50' : '#FF5722',
+    fontWeight: 'bold'
+  }
+}
+
+// 添加游客视图的计算状态
+const calculateGuestStatus = (row: MaterialRow) => {
+  return {
+    财务完成状态: row.标准价格 ? '已完成' : '未完成',
+    MRP完成状态: (row.MRP控制者 && row.最小批量大小PUR && row.舍入值PUR && 
+                row.计划交货时间PUR && row.检测时间QC) ? '已完成' : '未完成',
+    完成状态: row.完成时间 ? '已完成' : '未完成'
+  }
 }
 </script>
 
@@ -2136,6 +2407,38 @@ th, td {
 
 .export-button:hover, .import-button:hover {
   opacity: 0.9;
+}
+
+.login-buttons {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 20px;
+}
+
+.guest-button {
+  background-color: #607d8b;
+}
+
+.guest-button:hover {
+  background-color: #546e7a;
+}
+
+.guest-dialog {
+  max-width: 400px;
+}
+
+/* 添加状态列的样式 */
+td[class*="完成状态"] {
+  font-weight: bold;
+}
+
+td[class*="完成状态"]:contains("已完成") {
+  color: #4caf50;
+}
+
+td[class*="完成状态"]:contains("未完成") {
+  color: #f44336;
 }
 </style>
 
