@@ -272,6 +272,17 @@ def authenticate_user(credentials: HTTPAuthorizationCredentials = Depends(securi
     except Exception as exc:
         raise HTTPException(status_code=401, detail="Invalid token") from exc
 
+# 获取当前用户
+def get_current_user(request: Request):
+    auth_header = request.headers.get('Authorization')
+    if not auth_header or not auth_header.startswith('Bearer '):
+        return None
+    try:
+        token = auth_header.split(' ')[1]
+        return jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+    except:
+        return None
+
 # 登录接口
 @app.post("/login")
 async def login(user_data: User):
@@ -395,7 +406,7 @@ async def save_materials(materials: List[Material], user = Depends(authenticate_
 @app.get("/materials")
 async def get_materials(
     request: Request,
-    user: dict | None = Depends(lambda: None),  # 修改为可选参数，默认为 None
+    user: dict | None = Depends(get_current_user),  # 修改为使用 get_current_user
     page: int = 1,
     page_size: int = 15,
     show_completed: bool = False,
@@ -403,7 +414,7 @@ async def get_materials(
     物料描述: str = None,
     物料组: str = None,
     工厂: str = None,
-    游客姓名: str = None  # 添加游客姓名参数
+    游客姓名: str = None
 ):
     conn = get_db_connection()
     c = conn.cursor()

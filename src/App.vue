@@ -430,7 +430,7 @@
 import { ref, computed, onMounted } from 'vue'
 import * as XLSX from 'xlsx'
 import axios from 'axios'
-import { debounce as _debounce } from 'lodash-es'  // 使用as关键字重命名导入
+import { debounce } from 'lodash-es'  // 导入debounce
 
 interface MaterialRow {
   '工厂': string;
@@ -615,6 +615,8 @@ const emailPush = ref(false)
 // 登录处理
 const handleLogin = async () => {
   try {
+    console.log('登录前 - isGuest:', isGuest.value)
+    
     const response = await axios.post(`${API_BASE_URL}/login`, loginForm.value)
     
     // 保存 token
@@ -622,8 +624,11 @@ const handleLogin = async () => {
     
     // 设置用户信息
     isLoggedIn.value = true
+    isGuest.value = false  // 确保设置为false
     department.value = response.data.department
-    username.value = loginForm.value.username  // 添加这行，保存用户名
+    username.value = loginForm.value.username
+    
+    console.log('登录后 - isGuest:', isGuest.value, 'department:', department.value)
     
     // 设置工厂筛选
     if (department.value === '制剂财务部') {
@@ -638,7 +643,6 @@ const handleLogin = async () => {
     if (response.data.settings) {
       showCompleted.value = response.data.settings.show_completed
       pageSize.value = response.data.settings.page_size
-      // 如果后端返回了 email_push 设置，则更新它
       if ('email_push' in response.data.settings) {
         emailPush.value = response.data.settings.email_push
       }
@@ -690,8 +694,9 @@ const handleChangePassword = async () => {
       
       // 更新 token 和登录状态
       localStorage.setItem('token', response.data.token)
-      department.value = response.data.department
       isLoggedIn.value = true
+      isGuest.value = false  // 确保设置为false
+      department.value = response.data.department
       tempToken.value = ''  // 清除临时 token
       
       // 清空修改密码表单
@@ -889,34 +894,43 @@ const handleFileUpload = async (event: Event) => {
 // 加载物料数据
 const loadTableData = async () => {
   try {
+    console.log('loadTableData - isGuest:', isGuest.value, 'department:', department.value)
+    
+    const params: SearchParams = {
+      page: currentPage.value,
+      page_size: pageSize.value,
+      show_completed: showCompleted.value,
+      物料: searchForm.value.物料 || undefined,
+      物料描述: searchForm.value.物料描述 || undefined,
+      物料组: searchForm.value.物料组 || undefined,
+      工厂: searchForm.value.工厂 || undefined
+    }
+    
+    // 如果是游客，添加游客姓名参数
+    if (isGuest.value) {
+      params.游客姓名 = username.value
+      console.log('添加游客参数:', username.value)
+    }
+    
+    console.log('请求参数:', params)
+    console.log('请求头:', isGuest.value ? '无token' : '有token')
+    
     const response = await axios.get(`${API_BASE_URL}/materials`, {
-      headers: department.value === '游客' ? {} : { Authorization: `Bearer ${localStorage.getItem('token')}` },
-      params: {
-        page: currentPage.value,
-        page_size: pageSize.value,
-        show_completed: showCompleted.value,
-        物料: searchForm.value.物料 || undefined,
-        物料描述: searchForm.value.物料描述 || undefined,
-        物料组: searchForm.value.物料组 || undefined,
-        工厂: searchForm.value.工厂 || undefined
+      params: params,
+      headers: isGuest.value ? {} : {
+        Authorization: `Bearer ${localStorage.getItem('token')}`
       }
     })
     
-    let data = response.data.items
+    console.log('响应状态:', response.status)
+    console.log('响应数据条数:', response.data.items.length)
     
-    // 如果是游客，添加状态计算
-    if (department.value === '游客') {
-      data = data.map((row: MaterialRow) => ({
-        ...row,
-        ...calculateGuestStatus(row)
-      }))
-    }
-    
-    tableData.value = data
+    tableData.value = response.data.items
     totalItems.value = response.data.total
     totalPages.value = response.data.total_pages
-    currentPage.value = response.data.page
+    
   } catch (error) {
+    console.error('加载数据失败:', error)
     alert('加载数据失败')
   }
 }
@@ -1088,10 +1102,46 @@ const handleCellChange = async (rowIndex: number, header: string, event: Event) 
   }
 }
 
-// 页码改变处理函数
-const handlePageChange = async (page: number) => {
-  currentPage.value = page
-  await loadTableData()
+// 处理分页变化
+const handlePageChange = async (newPage: number) => {
+  console.log('分页变化 - isGuest:', isGuest.value, 'newPage:', newPage)
+  
+  currentPage.value = newPage
+  
+  try {
+    const params: SearchParams = {
+      page: currentPage.value,
+      page_size: pageSize.value,
+      show_completed: showCompleted.value,
+      物料: searchForm.value.物料 || undefined,
+      物料描述: searchForm.value.物料描述 || undefined,
+      物料组: searchForm.value.物料组 || undefined,
+      工厂: searchForm.value.工厂 || undefined
+    }
+    
+    // 如果是游客，添加游客姓名参数
+    if (isGuest.value) {
+      params.游客姓名 = username.value
+      console.log('分页添加游客参数:', username.value)
+    }
+    
+    console.log('分页请求参数:', params)
+    
+    const response = await axios.get(`${API_BASE_URL}/materials`, {
+      params: params,
+      headers: isGuest.value ? {} : {
+        Authorization: `Bearer ${localStorage.getItem('token')}`
+      }
+    })
+    
+    tableData.value = response.data.items
+    totalItems.value = response.data.total
+    totalPages.value = response.data.total_pages
+    
+  } catch (error) {
+    console.error('加载分页数据失败:', error)
+    alert('加载分页数据失败')
+  }
 }
 
 // 在现有的 import 语句下添加
@@ -1522,8 +1572,10 @@ const _debounce = (fn: Function, delay: number) => {
 }
 
 // 搜索处理函数
-const handleSearch = _debounce(async () => {
+const handleSearch = debounce(async () => {
   try {
+    console.log('handleSearch - isGuest:', isGuest.value, 'department:', department.value)
+    
     // 重置到第一页
     currentPage.value = 1
     
@@ -1541,7 +1593,11 @@ const handleSearch = _debounce(async () => {
     // 如果是游客，添加游客姓名参数
     if (isGuest.value) {
       params.游客姓名 = username.value
+      console.log('添加游客参数:', username.value)
     }
+    
+    console.log('搜索请求参数:', params)
+    console.log('搜索请求头:', isGuest.value ? '无token' : '有token')
     
     // 发送请求
     const response = await axios.get(`${API_BASE_URL}/materials`, {
@@ -1550,6 +1606,10 @@ const handleSearch = _debounce(async () => {
         Authorization: `Bearer ${localStorage.getItem('token')}`
       }
     })
+    
+    console.log('搜索响应状态:', response.status)
+    console.log('搜索响应数据条数:', response.data.items.length)
+    console.log('后端返回的is_guest:', response.data.is_guest)
     
     // 更新表格数据
     tableData.value = response.data.items
@@ -1861,6 +1921,8 @@ const handleGuestLogin = async () => {
   }
   
   try {
+    console.log('游客登录前 - isGuest:', isGuest.value)
+    
     // 设置游客默认显示15条记录
     pageSize.value = 15
     currentPage.value = 1
@@ -1873,14 +1935,19 @@ const handleGuestLogin = async () => {
       }
     })
     
+    console.log('游客登录响应:', response.data)
+    
     if (response.data.items.length > 0) {
+      // 先设置游客标识，再设置其他状态
+      isGuest.value = true
       isLoggedIn.value = true
-      isGuest.value = true  // 设置游客标识
       username.value = guestForm.value.applicant
       department.value = '游客'
       showGuestDialog.value = false
       
-      // 更新表格数据
+      console.log('游客登录后 - isGuest:', isGuest.value, 'department:', department.value)
+      
+      // 更新表格数据，直接使用后端返回的数据
       tableData.value = response.data.items
       totalItems.value = response.data.total
       totalPages.value = response.data.total_pages
