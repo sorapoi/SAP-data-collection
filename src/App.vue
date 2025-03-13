@@ -53,7 +53,7 @@
     </div>
 
     <!-- 主要内容 -->
-    <div v-else class="main-content">
+    <div v-if="isLoggedIn" class="main-content">
       <div class="user-info">
         <div class="user-tag">
           <span class="username">{{ username }}</span>
@@ -726,7 +726,12 @@ const handleLogout = () => {
   username.value = ''
   department.value = ''
   localStorage.removeItem('token')
-  // 重置其他状态...
+  
+  // 重置分页相关状态
+  currentPage.value = 1
+  totalPages.value = 0
+  totalItems.value = 0
+  tableData.value = []
 }
 
 // 获取输入框提示文本
