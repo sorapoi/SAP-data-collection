@@ -2006,22 +2006,35 @@ const calculateGuestStatus = (row: MaterialRow) => {
 }
 </script>
 
+<style>
+/* 全局样式 */
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+}
+</style>
+
 <style scoped>
 .app-container {
-  min-height: 100vh;
+  height: 100vh;  /* 改用固定高度而不是最小高度 */
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
   background-attachment: fixed;
-  padding: 20px;
+  padding: 0;  /* 移除padding */
+  margin: 0;  /* 添加margin: 0 */
+  overflow: hidden;  /* 防止滚动 */
 }
 
 .login-container {
   display: flex;
   justify-content: center;
   align-items: center;
-  min-height: 100vh;
-  background-color: rgba(0, 0, 0, 0.4); /* 添加半透明遮罩 */
+  height: 100%;  /* 改用100%而不是100vh */
+  background-color: rgba(0, 0, 0, 0.4);
+  overflow: hidden;  /* 防止滚动 */
 }
 
 .login-form {
