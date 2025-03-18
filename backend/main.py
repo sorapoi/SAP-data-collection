@@ -1444,7 +1444,7 @@ async def update_material_from_spider(
             '市场': details.get('市场', ''),
             '工厂': details.get('工厂', ''),
             '标准价格': details.get('标准价格', ''),
-            '检测时间QC': details.get('检测时间', ''),
+            '检测时间QC': details.get('检验时间', ''),
             '基本计量单位': details.get('基本计量单位', ''),
             '备注1': details.get('备注1', ''),
             '备注2': details.get('备注2', ''),
