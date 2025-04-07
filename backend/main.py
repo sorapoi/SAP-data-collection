@@ -712,6 +712,14 @@ def calculate_fields(material: Material):
         material.最小批量大小PUR = "NA"
         material.舍入值PUR = "NA"
         material.计划交货时间PUR = "NA"
+
+    # 如果生产厂商有自己打印字样，设置相关字段为NA
+    if "自己打印" in material.生产厂商 or "华海打印" in material.生产厂商:
+        material.最小批量大小PUR = "NA"
+        material.舍入值PUR = "NA"
+        material.计划交货时间PUR = "NA"
+        material.检测时间QC = "NA"
+        material.MRP控制者 = "-1"
     
     # 设置默认值
     material.价格确定 = "3"
@@ -739,7 +747,8 @@ def calculate_fields(material: Material):
         material.成本核算批量 = "1"
     
     # 评估类和销售订单库存逻辑
-    has_processing = "进料加工" in (material.物料描述 or "")
+    # 判断物料描述是否包含"进料加工"且不包含"非进料加工"
+    has_processing = "进料加工" in (material.物料描述 or "") and "非进料加工" not in (material.物料描述 or "")
     
     # 初始化销售订单库存为 NA
     material.销售订单库存 = "NA"
