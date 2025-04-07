@@ -556,7 +556,8 @@ const mrpControllers = [
   { value: 'Z10', label: 'Z10 大客户成品&半成品' },
   { value: 'Z11', label: 'Z11 大客户原辅料' },
   { value: 'Z12', label: 'Z12 大客户包材' },
-  { value: 'Z13', label: 'Z13 劳保用品' }
+  { value: 'Z13', label: 'Z13 劳保用品' },
+  { value: 'NA', label: 'NA' }
 ]
 
 // 登录相关状态
@@ -1410,6 +1411,32 @@ const calculateFields = (row: MaterialRow) => {
   row.批量大小 = row.最小批量大小PUR
   row.舍入值 = row.舍入值PUR
 
+  // MRP控制着值为NA时，值都为NA
+  if (row.MRP控制者 === 'NA') {
+    row.MRP类型 = 'NA'
+    row.批量程序 = 'NA'
+    row.固定批量 = 'NA'
+    row.再订货点 = 'NA'
+    row.安全库存 = 'NA'
+    row.采购类型 = 'NA'
+    row.收货处理时间 = 'NA'
+    row.计划交货时间 = 'NA'
+    row.MRP区域 = 'NA'
+    row.反冲 = 'NA'
+    row.批量输入 = 'NA'
+    row.自制生产时间 = 'NA'
+    row.策略组 = 'NA'
+    row.消耗模式 = 'NA'
+    row.向后跨期期间 = 'NA'
+    row.向后跨期时间 = 'NA'
+    row.独立集中 = 'NA'
+    row.计划时间界 = 'NA'
+    row.生产评估 = 'NA'
+    row.生产计划 = 'NA'
+    row.批量大小 = 'NA'
+    row.舍入值 = 'NA'
+    row.综合MRP = 'NA'
+  }
   // 更新数据库
   updateCalculatedFields(row)
 }

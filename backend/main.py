@@ -719,7 +719,7 @@ def calculate_fields(material: Material):
         material.舍入值PUR = "NA"
         material.计划交货时间PUR = "NA"
         material.检测时间QC = "NA"
-        material.MRP控制者 = "-1"
+        material.MRP控制者 = "NA"
     
     # 设置默认值
     material.价格确定 = "3"
