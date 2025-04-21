@@ -123,7 +123,7 @@
           <table border="1">
             <thead>
               <tr>
-                <th v-for="header in headers" :key="header" :class="{ editable: isEditable(header) }">
+                <th v-for="header in headers" :key="header" :class="{ editable: header === '固定批量' ? false : isEditable(header) }">
                   {{ header }}
                 </th>
               </tr>
@@ -131,7 +131,7 @@
             <tbody>
               <tr v-for="(row, index) in tableData" :key="index">
                 <td v-for="header in headers" :key="header">
-                  <template v-if="isEditable(header)">
+                  <template v-if="isEditable(header, index)">
                     <select v-if="header === 'MRP控制者'"
                       v-model="row[header]"
                       @change="handleCellChange(index, header, $event)"
@@ -594,9 +594,16 @@ const canImport = computed(() => department.value === '信息部')
 const canExport = computed(() => true)  // 所有用户都可以导出
  
 const getEditableColumns = computed(() => {
+  // 基本可编辑字段
+  let editableColumns = [];
+  
   switch (department.value) {
     case '运营管理部':
-      return ['MRP控制者', '最小批量大小PUR', '舍入值PUR', '计划交货时间PUR', '检测时间QC']  // 添加采购部的字段
+      editableColumns = ['MRP控制者', '最小批量大小PUR', '舍入值PUR', '计划交货时间PUR', '检测时间QC']  // 添加采购部的字段
+      
+      // 固定批量不再作为整列添加到可编辑列表中
+      // 而是在isEditable方法中根据每行的批量程序值动态判断
+      return editableColumns
     case '采购部':
       return ['最小批量大小PUR', '舍入值PUR', '计划交货时间PUR']
     case 'QC检测室':
@@ -788,7 +795,16 @@ const validateInput = (rowIndex: number, header: string, event: Event) => {
 }
 
 // 判断列是否可编辑
-const isEditable = (header: string) => {
+const isEditable = (header: string, rowIndex?: number) => {
+  // 对于固定批量字段，只有当对应行的批量程序为'FX'时才可编辑
+  if (header === '固定批量' && rowIndex !== undefined) {
+    const row = tableData.value[rowIndex]
+    const canEdit = department.value === '运营管理部' && row?.批量程序 === 'FX'
+    if (canEdit) {
+      calculateFields(row)
+    }
+    return canEdit
+  }
   return getEditableColumns.value.includes(header)
 }
 
@@ -1059,8 +1075,9 @@ const handleCellBlur = async (rowIndex: number, header: string, event: Event) =>
 
 // 修改原有的 handleCellChange 函数
 const handleCellChange = async (rowIndex: number, header: string, event: Event) => {
+
   if (!isEditable(header)) return
-  
+
   let value = header === 'MRP控制者' 
     ? (event.target as HTMLSelectElement).value 
     : (event.target as HTMLInputElement).value
@@ -1089,9 +1106,14 @@ const handleCellChange = async (rowIndex: number, header: string, event: Event) 
     
     // 更新本地数据
     tableData.value[rowIndex][header] = value
-    
-    // 检查是否需要触发计算
-    checkAndCalculate(tableData.value[rowIndex])
+
+    // 如果修改的是固定批量字段，直接触发计算
+    if (header === '固定批量') {
+      calculateFields(tableData.value[rowIndex])
+    } else {
+      // 检查是否需要触发计算
+      checkAndCalculate(tableData.value[rowIndex])
+    }
     
   } catch (error: any) {
     // 恢复原值
@@ -1259,6 +1281,12 @@ const checkAndCalculate = (row: MaterialRow) => {
     row.MRP控制者
   ]
   
+  // 如果是固定批量字段被修改且批量程序为FX，也触发计算
+  if (row.批量程序 === 'FX' && row.固定批量) {
+    calculateFields(row)
+    return
+  }
+  
   if (requiredFields.every(field => field?.trim())) {
     calculateFields(row)
   }
@@ -1305,7 +1333,15 @@ const calculateFields = (row: MaterialRow) => {
   }
 
   // 固定批量计算
-  row.固定批量 = (row.批量程序 !== 'FX' && row.批量程序 !== '') ? 'NA' : ''
+  // 只有当批量程序不是FX时，固定批量设为NA
+  // 当批量程序是FX时，保持固定批量为空，让运营部填写
+  // 如果批量程序是FX且固定批量已有值，则保留该值
+  if (row.批量程序 !== 'FX' && row.批量程序 !== '') {
+    row.固定批量 = 'NA'
+  } else if (row.批量程序 === 'FX' && !row.固定批量) {
+    row.固定批量 = ''
+  }
+  // 注意：如果批量程序是FX且固定批量已有值，则不修改固定批量
 
   // 再订货点计算
   row.再订货点 = row.物料 ? 'NA' : ''
@@ -1438,7 +1474,12 @@ const calculateFields = (row: MaterialRow) => {
     row.综合MRP = 'NA'
   }
   // 更新数据库
-  updateCalculatedFields(row)
+  // 只有当固定批量有值时才更新数据库
+  console.log('更新前')
+  if (row.固定批量) {
+    updateCalculatedFields(row)
+    console.log('更新后')
+  }
 }
 
 // 更新数据库中的计算字段
