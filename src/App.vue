@@ -1429,12 +1429,15 @@ const calculateFields = (row: MaterialRow) => {
   row.独立集中 = firstChar === '5' ? 'NA' : '2'
 
   // 计划时间界计算
-  if (firstChar === '5' && row.市场 === '中国') {
+  // if (firstChar === '5' && row.市场 === '中国') {
+  //   row.计划时间界 = '1'
+  // } else if (firstChar === '5') {
+  //   row.计划时间界 = '60'
+  // } else {
+  //   row.计划时间界 = 'NA'
+  // }
+  if (firstChar === '5') {
     row.计划时间界 = '1'
-  } else if (firstChar === '5') {
-    row.计划时间界 = '60'
-  } else {
-    row.计划时间界 = 'NA'
   }
 
   // 生产调度员计算
