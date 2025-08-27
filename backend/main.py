@@ -454,6 +454,12 @@ async def get_materials(
             elif user["department"] == "采购部":
                 where_conditions.append("物料 NOT LIKE '4%' AND 物料 NOT LIKE '5%'")
         
+        # 非财务部门不能查看生产厂商包含"华海打印"或"华海自己打印"的数据
+        if not user or (user and user["department"] not in ["制剂财务部", "制药科技财务部"]):
+            where_conditions.append("(生产厂商 IS NULL OR (生产厂商 NOT LIKE %s AND 生产厂商 NOT LIKE %s))")
+            where_params.append("%华海打印%")
+            where_params.append("%华海自己打印%")
+        
         # 只有在勾选时才显示已完成物料
         if not show_completed:
             where_conditions.append("(完成时间 IS NULL OR 完成时间 = '')")
@@ -989,19 +995,25 @@ async def api_export_materials(api_auth: APIAuth):
                 新建时间,
                 完成时间
             FROM materials 
-            WHERE 检测时间QC IS NOT NULL 
-            AND 检测时间QC != ''
-            AND 最小批量大小PUR IS NOT NULL 
-            AND 最小批量大小PUR != ''
-            AND 舍入值PUR IS NOT NULL 
-            AND 舍入值PUR != ''
-            AND 计划交货时间PUR IS NOT NULL 
-            AND 计划交货时间PUR != ''
-            AND MRP控制者 IS NOT NULL 
-            AND MRP控制者 != ''
-            AND 标准价格 IS NOT NULL
-            AND 标准价格 != ''
-            AND (完成时间 IS NULL OR 完成时间 = '')
+            WHERE (
+                检测时间QC IS NOT NULL
+                AND 检测时间QC != ''
+                AND 最小批量大小PUR IS NOT NULL
+                AND 最小批量大小PUR != ''
+                AND 舍入值PUR IS NOT NULL
+                AND 舍入值PUR != ''
+                AND 计划交货时间PUR IS NOT NULL
+                AND 计划交货时间PUR != ''
+                AND MRP控制者 IS NOT NULL
+                AND MRP控制者 != ''
+                AND 标准价格 IS NOT NULL
+                AND 标准价格 != ''
+                AND (完成时间 IS NULL OR 完成时间 = '')
+            ) OR (
+                标准价格 IS NOT NULL
+                AND 标准价格 != ''
+                AND (生产厂商 LIKE '%华海打印%' OR 生产厂商 LIKE '%华海自己打印%')
+            )
         ''')
         
         columns = [description[0] for description in c.description]
