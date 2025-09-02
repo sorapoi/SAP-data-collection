@@ -37,6 +37,8 @@ trigger:
   event:
     - push
     - tag
+    - deployment
+    - pull_request
 
 services:
   - name: docker
