@@ -3,36 +3,75 @@ type: docker
 name: materials-pipeline
 
 steps:
-  - name: build-frontend
-    image: node:18-alpine
-    commands:
-      - npm install
-      - npm run build
-    volumes:
-      - name: cache
-        path: /app/node_modules
+  # 构建并推送后端 Docker 镜像
+  - name: build-and-push-backend-image
+    image: plugins/docker
+    settings:
+      # 私有仓库的地址
+      registry: 192.168.3.5:6000
+      # 镜像仓库和名称
+      repo: 192.168.3.5:6000/materials-backend
+      # 使用 Git 提交哈希作为标签，保证唯一性
+      tags:
+        - ${DRONE_COMMIT_SHA:0:7}
+        - latest
+      # Dockerfile 的路径
+      dockerfile: backend/Dockerfile
+      # 构建上下文
+      context: backend
+      # 如果您的私有仓库没有配置 SSL (即使用 http)，则需要此项
+      insecure: true
 
-  - name: build-backend
-    image: python:3.11-slim
-    commands:
-      - pip install -r backend/requirements.txt
-    volumes:
-      - name: cache
-        path: /root/.cache
+  # 构建并推送前端 Docker 镜像
+  - name: build-and-push-frontend-image
+    image: plugins/docker
+    settings:
+      # 私有仓库的地址
+      registry: 192.168.3.5:6000
+      # 镜像仓库和名称
+      repo: 192.168.3.5:6000/materials-frontend
+      # 使用 Git 提交哈希作为标签，保证唯一性
+      tags:
+        - ${DRONE_COMMIT_SHA:0:7}
+        - latest
+      # Dockerfile 的路径
+      dockerfile: Dockerfile
+      # 构建上下文
+      context: .
+      # 如果您的私有仓库没有配置 SSL (即使用 http)，则需要此项
+      insecure: true
 
-  - name: run-docker-compose
+  # 在本机直接部署后端
+  - name: deploy-backend-on-host
     image: docker:latest
-    commands:
-      - sleep 30  # 增加等待时间以确保 Docker 守护进程完全启动
-      - docker info  # 检查 Docker 守护进程状态
-      - ls -la  # 检查当前目录内容
-      - pwd  # 显示当前工作目录
-      - docker-compose up -d --build  # 使用 --build 确保构建最新镜像
     volumes:
       - name: dockersock
-        path: /var/run
-    environment:
-      DOCKER_HOST: unix:///var/run/docker.sock
+        path: /var/run/docker.sock
+    commands:
+      - echo "Deploying backend on the host machine..."
+      # 拉取最新的 Docker 镜像
+      - docker pull 192.168.3.5:6000/materials-backend:latest
+      # 停止并删除旧的容器 (如果存在)
+      - docker stop materials-backend-container || true
+      - docker rm materials-backend-container || true
+      # 启动新容器
+      - docker run -d --name materials-backend-container -p 8000:8000 --restart always 192.168.3.5:6000/materials-backend:latest
+
+  # 在本机直接部署前端
+  - name: deploy-frontend-on-host
+    image: docker:latest
+    volumes:
+      - name: dockersock
+        path: /var/run/docker.sock
+    commands:
+      - echo "Deploying frontend on the host machine..."
+      # 拉取最新的 Docker 镜像
+      - docker pull 192.168.3.5:6000/materials-frontend:latest
+      # 停止并删除旧的容器 (如果存在)
+      - docker stop materials-frontend-container || true
+      - docker rm materials-frontend-container || true
+      # 启动新容器
+      - docker run -d --name materials-frontend-container -p 80:80 --restart always 192.168.3.5:6000/materials-frontend:latest
 
 trigger:
   branch:
@@ -47,21 +86,8 @@ trigger:
     - pull_request
     - custom
 
-services:
-  - name: docker
-    image: docker:dind
-    privileged: true
-    command: ["dockerd", "--host", "unix:///var/run/docker.sock", "--tls=false"]
-    volumes:
-      - name: dockersock
-        path: /var/run
-      - name: drone-src
-        path: /drone/src
-
+# 定义一个数据卷，用于挂载 Docker Socket
 volumes:
   - name: dockersock
-    temp: {}
-  - name: cache
-    temp: {}
-  - name: drone-src
-    temp: {}
+    host:
+      path: /var/run/docker.sock
