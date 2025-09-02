@@ -23,10 +23,17 @@ steps:
   - name: run-docker-compose
     image: docker:latest
     commands:
-      - docker-compose up -d
+      - sleep 10  # 等待 Docker 守护进程完全启动
+      - ls -la  # 检查当前目录内容
+      - pwd  # 显示当前工作目录
+      - docker-compose up -d --build  # 使用 --build 确保构建最新镜像
     volumes:
       - name: dockersock
         path: /var/run
+      - name: workspace
+        path: /drone/src
+    environment:
+      DOCKER_HOST: unix:///var/run/docker.sock
 
 trigger:
   branch:
@@ -45,12 +52,17 @@ services:
   - name: docker
     image: docker:dind
     privileged: true
+    command: ["dockerd", "--host", "unix:///var/run/docker.sock"]
     volumes:
       - name: dockersock
         path: /var/run
+      - name: workspace
+        path: /drone/src
 
 volumes:
   - name: dockersock
     temp: {}
   - name: cache
+    temp: {}
+  - name: workspace
     temp: {}
