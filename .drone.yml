@@ -3,35 +3,30 @@ type: docker
 name: materials-pipeline
 
 steps:
-  - name: build-backend
-    image: plugins/docker
-    settings:
-      dockerfile: backend/Dockerfile
-      context: backend
-      registry: 192.168.3.5:6000
-      repo: 192.168.3.5:6000/materials-backend
-      insecure: true
-      tags:
-        - latest
-        - ${DRONE_COMMIT_SHA:0:8}
+  - name: build-frontend
+    image: node:18-alpine
+    commands:
+      - npm install
+      - npm run build
+    volumes:
+      - name: cache
+        path: /app/node_modules
 
-  - name: deploy
-    image: appleboy/drone-ssh
-    settings:
-      host:
-        from_secret: ssh_host
-      username:
-        from_secret: ssh_username
-      password:
-        from_secret: ssh_password
-      port: 22
-      script:
-        - echo "Starting deployment process..."
-        - mkdir -p /app/materials/data || true
-        - cd /home/docker/materials || { echo "Directory not found, creating..."; mkdir -p /home/docker/materials; cd /home/docker/materials; }
-        - docker-compose pull
-        - docker-compose up -d --build
-        - echo "Deployment completed successfully"
+  - name: build-backend
+    image: python:3.11-slim
+    commands:
+      - pip install -r backend/requirements.txt
+    volumes:
+      - name: cache
+        path: /root/.cache
+
+  - name: run-docker-compose
+    image: docker:latest
+    commands:
+      - docker-compose up -d
+    volumes:
+      - name: dockersock
+        path: /var/run
 
 trigger:
   branch:
@@ -56,4 +51,6 @@ services:
 
 volumes:
   - name: dockersock
+    temp: {}
+  - name: cache
     temp: {}
