@@ -30,7 +30,7 @@ steps:
     volumes:
       - name: dockersock
         path: /var/run
-      - name: workspace
+      - name: drone-src
         path: /drone/src
     environment:
       DOCKER_HOST: unix:///var/run/docker.sock
@@ -56,7 +56,7 @@ services:
     volumes:
       - name: dockersock
         path: /var/run
-      - name: workspace
+      - name: drone-src
         path: /drone/src
 
 volumes:
@@ -64,5 +64,5 @@ volumes:
     temp: {}
   - name: cache
     temp: {}
-  - name: workspace
+  - name: drone-src
     temp: {}
