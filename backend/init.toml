@@ -1,0 +1,13 @@
+[push.dingding]
+url = "https://oapi.dingtalk.com/robot/send?access_token=fb7f62442be30914486da9e1078c5a6a682b9326039e0089ca097279b5d55830"
+keywords = [ "方糖",]
+
+[push.email]
+smtp_server = "smtp.huahaipharm.com"
+smtp_port = 25
+smtp_user = "yanfeilong@huahaipharm.com"
+smtp_password = "6mrkTVwqbnyxiwbg"
+
+[push.schedule]
+enabled = true
+time = "09:34"
