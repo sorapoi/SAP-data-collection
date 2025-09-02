@@ -20,25 +20,31 @@ steps:
     settings:
       host:
         from_secret: ssh_host
-      username: 
+      username:
         from_secret: ssh_username
       password:
         from_secret: ssh_password
       port: 22
       script:
-        - mkdir -p /app/materials/data
-        - cd /home/docker/materials
+        - echo "Starting deployment process..."
+        - mkdir -p /app/materials/data || true
+        - cd /home/docker/materials || { echo "Directory not found, creating..."; mkdir -p /home/docker/materials; cd /home/docker/materials; }
         - docker-compose pull
         - docker-compose up -d --build
+        - echo "Deployment completed successfully"
 
 trigger:
   branch:
     - main
+    - develop
+    - feature/*
+    - release/*
   event:
     - push
     - tag
     - deployment
     - pull_request
+    - custom
 
 services:
   - name: docker
