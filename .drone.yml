@@ -71,7 +71,7 @@ steps:
       - docker stop materials-frontend-container || true
       - docker rm materials-frontend-container || true
       # 启动新容器 (使用 8080 端口避免冲突)
-      - docker run -d --name materials-frontend-container -p 8089:80 --restart always 192.168.3.5:6000/materials-frontend:latest
+      - docker run -d --name materials-frontend-container -p 8099:80 --restart always 192.168.3.5:6000/materials-frontend:latest
 
 trigger:
   branch:
