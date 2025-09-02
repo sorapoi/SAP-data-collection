@@ -23,13 +23,16 @@ steps:
   - name: run-docker-compose
     image: docker:latest
     commands:
-      - sleep 10  # 等待 Docker 守护进程完全启动
+      - sleep 20  # 增加等待时间以确保 Docker 守护进程完全启动
+      - docker info  # 检查 Docker 守护进程状态
       - ls -la  # 检查当前目录内容
       - pwd  # 显示当前工作目录
       - docker-compose up -d --build  # 使用 --build 确保构建最新镜像
     volumes:
       - name: dockersock
         path: /var/run
+      - name: drone-src
+        path: /drone/src
     environment:
       DOCKER_HOST: unix:///var/run/docker.sock
 
