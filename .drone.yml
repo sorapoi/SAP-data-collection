@@ -23,7 +23,7 @@ steps:
   - name: run-docker-compose
     image: docker:latest
     commands:
-      - sleep 20  # 增加等待时间以确保 Docker 守护进程完全启动
+      - sleep 30  # 增加等待时间以确保 Docker 守护进程完全启动
       - docker info  # 检查 Docker 守护进程状态
       - ls -la  # 检查当前目录内容
       - pwd  # 显示当前工作目录
@@ -51,7 +51,7 @@ services:
   - name: docker
     image: docker:dind
     privileged: true
-    command: ["dockerd", "--host", "unix:///var/run/docker.sock"]
+    command: ["dockerd", "--host", "unix:///var/run/docker.sock", "--tls=false"]
     volumes:
       - name: dockersock
         path: /var/run
