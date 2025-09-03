@@ -455,7 +455,7 @@ async def get_materials(
                 where_conditions.append("物料 NOT LIKE '4%' AND 物料 NOT LIKE '5%'")
         
         # 非财务部门不能查看生产厂商包含"华海打印"或"华海自己打印"的数据
-        if not user or (user and user["department"] not in ["制剂财务部", "制药科技财务部"]):
+        if not user or (user and user["department"] not in ["制剂财务部", "制药科技财务部", "信息部"]):
             where_conditions.append("(生产厂商 IS NULL OR (生产厂商 NOT LIKE %s AND 生产厂商 NOT LIKE %s))")
             where_params.append("%华海打印%")
             where_params.append("%华海自己打印%")
