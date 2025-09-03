@@ -139,7 +139,8 @@ def notify_material_status(status_info):
         message = f"""
 ### SAP物料数据统计
 - **未完成物料总数**: {status_info['count']}
-- **财务部待处理**: {status_info['finance_incomplete']}
+- **制剂财务部待处理**: {status_info['finance_5000_incomplete']}
+- **制药科技财务部待处理**: {status_info['finance_5300_incomplete']}
 - **运营部待处理**: {status_info['operation_incomplete']}
 - **统计时间**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
         """

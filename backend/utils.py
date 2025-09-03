@@ -15,14 +15,24 @@ async def get_materials_status(user=None):
         c.execute('SELECT COUNT(*) FROM materials WHERE 完成时间 IS NULL')
         total_incomplete = c.fetchone()[0]
         
-        # 获取财务部待处理的数量（完成时间为空且标准价格为空）
+        # 获取制剂财务部待处理的数量（完成时间为空且标准价格为空且工厂为5000）
         c.execute('''
             SELECT COUNT(*) FROM materials 
             WHERE 完成时间 IS NULL 
             AND (标准价格 IS NULL OR 标准价格 = '')
+            AND 工厂 = '5000'
         ''')
-        finance_incomplete = c.fetchone()[0]
-        
+        finance_5000_incomplete = c.fetchone()[0]
+
+        # 获取制药科技财务部待处理的数量（完成时间为空且标准价格为空且工厂为5300）
+        c.execute('''
+            SELECT COUNT(*) FROM materials 
+            WHERE 完成时间 IS NULL 
+            AND (标准价格 IS NULL OR 标准价格 = '')
+            AND 工厂 = '5300'
+        ''')
+        finance_5300_incomplete = c.fetchone()[0]
+
         # 获取运营部待处理的数量（完成时间为空且相关字段为空）
         c.execute('''
             SELECT COUNT(*) FROM materials 
@@ -39,9 +49,12 @@ async def get_materials_status(user=None):
         
         return {
             "count": total_incomplete,
-            "finance_incomplete": finance_incomplete,
+            "finance_incomplete": finance_5000_incomplete + finance_5300_incomplete,
             "operation_incomplete": operation_incomplete,
-            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "finance_5300_incomplete": finance_5300_incomplete,
+            "finance_5000_incomplete": finance_5000_incomplete
+
         }
         
     except Exception as e:

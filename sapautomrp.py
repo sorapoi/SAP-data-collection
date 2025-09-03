@@ -150,7 +150,7 @@ def option(session, data):
     session.findById("wnd[0]").sendVKey(0)
     session.findById("wnd[0]").sendVKey(0)
     session.findById("wnd[1]/tbar[0]/btn[19]").press()
-    if dispo != 'NA' and dispo!= '':
+    if dispo != 'NA' and dispo!= '' and dispo != None:
         session.findById("wnd[1]/usr/tblSAPLMGMMTC_VIEW").getAbsoluteRow(12).selected = -1
         session.findById("wnd[1]/usr/tblSAPLMGMMTC_VIEW").getAbsoluteRow(13).selected = -1
         session.findById("wnd[1]/usr/tblSAPLMGMMTC_VIEW").getAbsoluteRow(14).selected = -1
@@ -172,7 +172,7 @@ def option(session, data):
     session.findById("wnd[1]/tbar[0]/btn[0]").press()
 
 # MRP视图相关
-    if dispo != 'NA' and dispo!= '':
+    if dispo != 'NA' and dispo!= '' and dispo != None:
         session.findById("wnd[0]/usr/tabsTABSPR1/tabpSP13/ssubTABFRA1:SAPLMGMM:2000/subSUB3:SAPLMGD1:2482/ctxtMARC-DISMM").text = dismm
         session.findById("wnd[0]/usr/tabsTABSPR1/tabpSP13/ssubTABFRA1:SAPLMGMM:2000/subSUB3:SAPLMGD1:2482/txtMARC-FXHOR").text = fxhor
         session.findById("wnd[0]/usr/tabsTABSPR1/tabpSP13/ssubTABFRA1:SAPLMGMM:2000/subSUB3:SAPLMGD1:2482/ctxtMARC-DISPO").text = dispo
