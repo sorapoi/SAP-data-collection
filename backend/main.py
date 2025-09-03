@@ -1013,6 +1013,7 @@ async def api_export_materials(api_auth: APIAuth):
                 标准价格 IS NOT NULL
                 AND 标准价格 != ''
                 AND (生产厂商 LIKE '%华海打印%' OR 生产厂商 LIKE '%华海自己打印%')
+                AND (完成时间 IS NULL OR 完成时间 = '')
             )
         ''')
         
