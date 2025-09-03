@@ -49,13 +49,15 @@ steps:
         path: /var/run/docker.sock
     commands:
       - echo "Deploying backend on the host machine..."
+      # 创建自定义网络（如果不存在）
+      - docker network create materials-network || true
       # 拉取最新的 Docker 镜像
       - docker pull 192.168.3.5:6000/materials-backend:latest
       # 停止并删除旧的容器 (如果存在)
       - docker stop materials-backend || true
       - docker rm materials-backend || true
-      # 启动新容器
-      - docker run -d --name materials-backend -p 8000:8000 --restart always 192.168.3.5:6000/materials-backend:latest
+      # 启动新容器并连接到自定义网络
+      - docker run -d --name materials-backend --network materials-network -p 8000:8000 --restart always 192.168.3.5:6000/materials-backend:latest
 
   # 在本机直接部署前端
   - name: deploy-frontend-on-host
@@ -70,8 +72,8 @@ steps:
       # 停止并删除旧的容器 (如果存在)
       - docker stop materials-frontend-container || true
       - docker rm materials-frontend-container || true
-      # 启动新容器 (使用 8080 端口避免冲突)
-      - docker run -d --name materials-frontend-container -p 8099:80 --restart always 192.168.3.5:6000/materials-frontend:latest
+      # 启动新容器并连接到自定义网络 (使用 8080 端口避免冲突)
+      - docker run -d --name materials-frontend-container --network materials-network -p 8099:80 --restart always 192.168.3.5:6000/materials-frontend:latest
 
 trigger:
   branch:

@@ -26,6 +26,7 @@ ENV PYTHONUNBUFFERED=1
 ENV DATABASE_PATH=/app/materials/data/materials.db
 ENV ENV=production
 ENV TZ=Asia/Shanghai
+ENV SECRET_KEY=your-secret-key-here
 
 # 暴露端口
 EXPOSE 8000
