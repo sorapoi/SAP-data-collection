@@ -52,10 +52,10 @@ steps:
       # 拉取最新的 Docker 镜像
       - docker pull 192.168.3.5:6000/materials-backend:latest
       # 停止并删除旧的容器 (如果存在)
-      - docker stop materials-backend-container || true
-      - docker rm materials-backend-container || true
+      - docker stop materials-backend || true
+      - docker rm materials-backend || true
       # 启动新容器
-      - docker run -d --name materials-backend-container -p 8000:8000 --restart always 192.168.3.5:6000/materials-backend:latest
+      - docker run -d --name materials-backend -p 8000:8000 --restart always 192.168.3.5:6000/materials-backend:latest
 
   # 在本机直接部署前端
   - name: deploy-frontend-on-host
