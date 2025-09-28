@@ -70,7 +70,7 @@
         <div class="right-buttons">
           <label v-if="canImport" class="file-input-label">
             <input type="file" @change="handleFileUpload" accept=".xlsx,.xls">
-            <span>选择文件</span>
+            <span>选择文件 </span>
           </label>
           <button v-if="canExport && !isGuest" @click="exportToExcel">导出Excel</button>
         </div>
