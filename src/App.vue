@@ -156,12 +156,12 @@
                          :title="row[header]">
                       {{ row[header] }}
                     </div>
-                    <template v-else-if="header === '财务状态'">
+                    <template v-else-if="header === '财务完成状态'">
                       <span :style="getStatusStyle(getFinanceStatus(row))">
                         {{ getFinanceStatus(row) }}
                       </span>
                     </template>
-                    <template v-else-if="header === 'MRP状态'">
+                    <template v-else-if="header === 'MRP完成状态'">
                       <span :style="getStatusStyle(getMRPStatus(row))">
                         {{ getMRPStatus(row) }}
                       </span>
@@ -2072,6 +2072,7 @@ const getStatusStyle = (status: string) => {
 
 // 添加游客视图的计算状态
 const calculateGuestStatus = (row: MaterialRow) => {
+  console.log('计算状态 - isGuest:', isGuest.value)
   return {
     财务完成状态: (row.标准价格 || row.完成时间) ? '已完成' : '未完成',
     MRP完成状态: ((row.MRP控制者 && row.最小批量大小PUR && row.舍入值PUR && 
