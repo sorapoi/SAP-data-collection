@@ -1531,7 +1531,7 @@ const updateCalculatedFields = async (row: MaterialRow) => {
 
 // 设置相关的状态
 const showSettings = ref(false)
-const showCompleted = ref(false))
+const showCompleted = ref(false)
 
 // 用户管理相关的状态
 const showUserManagement = ref(false)
