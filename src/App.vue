@@ -2073,9 +2073,9 @@ const getStatusStyle = (status: string) => {
 // 添加游客视图的计算状态
 const calculateGuestStatus = (row: MaterialRow) => {
   return {
-    财务完成状态: row.标准价格 ? '已完成' : '未完成',
-    MRP完成状态: (row.MRP控制者 && row.最小批量大小PUR && row.舍入值PUR && 
-                row.计划交货时间PUR && row.检测时间QC) ? '已完成' : '未完成',
+    财务完成状态: (row.标准价格 || row.完成时间) ? '已完成' : '未完成',
+    MRP完成状态: ((row.MRP控制者 && row.最小批量大小PUR && row.舍入值PUR && 
+                row.计划交货时间PUR && row.检测时间QC) || row.完成时间) ? '已完成' : '未完成',
     完成状态: row.完成时间 ? '已完成' : '未完成'
   }
 }
