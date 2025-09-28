@@ -11,7 +11,7 @@ import time
 
 class MaterialSpider:
     def __init__(self):
-        self.base_url = "http://192.168.2.41:8081/material/data/material_data_main/materialDataMain.do?method=data&q.j_path=main&q.fdWerks=5000&q.fdWerks=5300&q.fdMtart=Z001&q.fdMtart=Z002&q.fdMtart=Z003&q.fdMtart=Z004&rowsize=25"
+        self.base_url = "http://192.168.2.41:8081/material/data/material_data_main/materialDataMain.do?method=data&q.j_path=main&q.fdWerks=5000&q.fdWerks=5300&q.fdMtart=Z001&q.fdMtart=Z002&q.fdMtart=Z003&q.fdMtart=Z004&rowsize=30"
         self.detail_base_url = "http://192.168.2.41:8081/material/data/material_data_main/materialDataMain.do?method=view&fdId="
         self.login_url = "http://192.168.2.41:8081/login.jsp"
         
@@ -134,7 +134,7 @@ class MaterialSpider:
         """获取后端 API 认证 token"""
         try:
             response = requests.post(
-                'http://home.dandan.autos:8088/login',
+                'http://home.dandan.ink:8088/login',
                 json={
                     "username": "yanfeilong",  # 使用有权限的账号
                     "password": "19931225"  # 使用正确的密码
@@ -152,7 +152,7 @@ class MaterialSpider:
             return None
 
     def check_and_fetch_details(self) -> None:
-        """检查并获取最近两天的物料详细信息"""
+        """检查并获取最近三天的物料详细信息"""
         try:
             materials = self.fetch_materials()
             today = datetime.now().date()
@@ -166,6 +166,9 @@ class MaterialSpider:
                             "%Y-%m-%d %H:%M:%S"
                         ).date()
                         
+                        # 只处理最近三天创建的物料
+                        if not (yesterday <= create_date <= today):
+                            continue
 
                         material_id = material['备注1'].replace('ID: ', '')
                         
@@ -182,7 +185,7 @@ class MaterialSpider:
                                 # 先发送到后端
                                 try:
                                     response = requests.post(
-                                        'http://home.dandan.autos:8088/api/materials/update',
+                                        'http://home.dandan.ink:8088/api/materials/update',
                                         json={
                                             'material_id': material_id,
                                             'details': details,
@@ -384,7 +387,7 @@ class MaterialSpider:
                 
                 # 设置登录信息
                 username = "yanfeilong"
-                password = "19931225@yfl"
+                password = "19931225Yfl"
                 
                 # 访问登录页面
                 print("访问登录页面...")

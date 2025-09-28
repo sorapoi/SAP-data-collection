@@ -60,7 +60,7 @@
           <span class="separator">:</span>
           <span class="department">{{ department }}</span>
         </div>
-        <button v-if="!isGuest" @click="openSettings" class="settings-button">设置</button>
+        <button @click="openSettings" class="settings-button">设置</button>
         <button v-if="!isGuest" @click="openEmailSettings">设置邮箱</button>
         <button v-if="!isGuest" @click="openChangePasswordModal">修改密码</button>
         <button v-if="department === '信息部'" @click="openUserManagement">用户管理</button>
@@ -1438,6 +1438,8 @@ const calculateFields = (row: MaterialRow) => {
   // }
   if (firstChar === '5') {
     row.计划时间界 = '1'
+  }else {
+    row.计划时间界 = 'NA'
   }
 
   // 生产调度员计算
