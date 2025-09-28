@@ -2042,7 +2042,7 @@ const handleGuestLogin = async () => {
 
 // 计算财务状态
 const getFinanceStatus = (row: MaterialRow) => {
-  return row.标准价格 ? '已完成' : '未完成'
+  return (row.标准价格 || row.完成时间) ? '已完成' : '未完成'
 }
 
 // 计算MRP状态
@@ -2054,7 +2054,7 @@ const getMRPStatus = (row: MaterialRow) => {
     row.计划交货时间PUR,
     row.检测时间QC
   ]
-  return requiredFields.every(field => field?.trim()) ? '已完成' : '未完成'
+  return (requiredFields.every(field => field?.trim()) || row.完成时间)  ? '已完成' : '未完成'
 }
 
 // 计算完成状态
