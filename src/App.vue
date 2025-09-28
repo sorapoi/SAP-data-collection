@@ -1531,7 +1531,7 @@ const updateCalculatedFields = async (row: MaterialRow) => {
 
 // 设置相关的状态
 const showSettings = ref(false)
-const showCompleted = ref(false)
+const showCompleted = ref(false))
 
 // 用户管理相关的状态
 const showUserManagement = ref(false)
@@ -1560,14 +1560,16 @@ const loadUserSettings = async () => {
 const handleSettingsChange = async () => {
   try {
     // 保存设置到服务器
-    await axios.post(`${API_BASE_URL}/user/settings`, {
-      show_completed: showCompleted.value,
-      page_size: pageSize.value,
-      email_push: emailPush.value
-    }, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-    })
-    
+    // 游客状态不保存到服务器
+    if (!isGuest.value) {
+      await axios.post(`${API_BASE_URL}/user/settings`, {
+        show_completed: showCompleted.value,
+        page_size: pageSize.value,
+        email_push: emailPush.value
+      }, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      })
+    }
     // 重新加载数据
     currentPage.value = 1
     
